@@ -425,11 +425,18 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                   <button
-                    onClick={onOpenComposer}
-                    className="px-3 py-2 rounded-lg bg-[#1a2d21] hover:bg-[#253f2e] text-[#cfc5aa] hover:text-white text-xs font-semibold border border-[#30523a] transition-all cursor-pointer hidden sm:inline-flex"
-                    title="Viết lời tri ân trực tiếp trên trang web"
+                    onClick={() => {
+                      const el = document.getElementById('letter-desk');
+                      if (el) {
+                        el.scrollIntoView({ behavior: 'smooth' });
+                      } else {
+                        onOpenComposer();
+                      }
+                    }}
+                    className="px-3 py-2 rounded-lg bg-[#1a2d21] hover:bg-[#253f2e] text-[#eccb76] hover:text-white text-xs font-semibold border border-[#30523a] transition-all cursor-pointer flex items-center gap-1.5"
+                    title="Cuộn tới Bàn Viết Thư & Cuộn Phim Ký Ức trên trang web"
                   >
-                    Viết trên web
+                    Viết trên web ✍️
                   </button>
                 </div>
               </div>

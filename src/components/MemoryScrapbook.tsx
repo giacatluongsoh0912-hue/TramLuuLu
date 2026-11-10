@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Heart, Sparkles, Plus, Image as ImageIcon, X, Camera, Upload, Link, Check, Edit2 } from 'lucide-react';
 import { MemoryPhoto } from '../data/memoriesData';
+import { compressImage } from '../utils/imageStorage';
 
 interface MemoryScrapbookProps {
   memories: MemoryPhoto[];
@@ -52,21 +53,30 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
     });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        if (isEditing) {
-          setEditImageSrc(reader.result);
-        } else {
-          setNewImageSrc(reader.result);
-        }
+    try {
+      const compressed = await compressImage(file, 1000, 1000, 0.82);
+      if (isEditing) {
+        setEditImageSrc(compressed);
+      } else {
+        setNewImageSrc(compressed);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          if (isEditing) {
+            setEditImageSrc(reader.result);
+          } else {
+            setNewImageSrc(reader.result);
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleOpenEdit = (mem: MemoryPhoto, e: React.MouseEvent) => {

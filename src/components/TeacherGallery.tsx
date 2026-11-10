@@ -19,6 +19,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { TeacherProfile, LEADERSHIP_TIMELINE_DATA, LeadershipMilestone } from '../data/memoriesData';
+import { compressImage } from '../utils/imageStorage';
 
 interface TeacherGalleryProps {
   teachers: TeacherProfile[];
@@ -95,21 +96,30 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
     });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        if (isEditing) {
-          setEditAvatar(reader.result);
-        } else {
-          setNewAvatar(reader.result);
-        }
+    try {
+      const compressed = await compressImage(file, 800, 800, 0.8);
+      if (isEditing) {
+        setEditAvatar(compressed);
+      } else {
+        setNewAvatar(compressed);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          if (isEditing) {
+            setEditAvatar(reader.result);
+          } else {
+            setNewAvatar(reader.result);
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleOpenEdit = (t: TeacherProfile) => {

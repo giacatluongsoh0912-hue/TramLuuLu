@@ -16,6 +16,8 @@ import { Footer } from './components/Footer';
 import { PetalCanvas } from './components/PetalCanvas';
 import { MiniMusicPlayer } from './components/MiniMusicPlayer';
 import { CinematicPrologue } from './components/CinematicPrologue';
+import { CinematicLetterDesk } from './components/CinematicLetterDesk';
+import { idbGet, idbSet } from './utils/imageStorage';
 import {
   INITIAL_MEMORIES,
   INITIAL_TRIBUTES,
@@ -86,40 +88,70 @@ export default function App() {
     }
   }, []);
 
-  // Persist memories
+  // Hydrate from IndexedDB on startup (preserves custom user photos even if localStorage quota was hit)
+  useEffect(() => {
+    (async () => {
+      try {
+        const idbMemories = await idbGet<MemoryPhoto[]>('csl_memories');
+        if (idbMemories && Array.isArray(idbMemories) && idbMemories.length > 0) {
+          setMemories(idbMemories);
+        }
+        const idbTeachers = await idbGet<TeacherProfile[]>('csl_teachers');
+        if (idbTeachers && Array.isArray(idbTeachers) && idbTeachers.length > 0) {
+          setTeachers(idbTeachers);
+        }
+        const idbTributes = await idbGet<TributeMessage[]>('csl_tributes');
+        if (idbTributes && Array.isArray(idbTributes) && idbTributes.length > 0) {
+          setTributes(idbTributes);
+        }
+        const idbNotes = await idbGet<PadletNote[]>('csl_padlet_notes');
+        if (idbNotes && Array.isArray(idbNotes) && idbNotes.length > 0) {
+          setPadletNotes(idbNotes);
+        }
+      } catch (err) {
+        console.warn('IndexedDB initial hydration skipped:', err);
+      }
+    })();
+  }, []);
+
+  // Persist memories to both localStorage and IndexedDB
   useEffect(() => {
     try {
       localStorage.setItem('csl_memories', JSON.stringify(memories));
-    } catch (e) {
-      console.error('Failed to save memories', e);
+    } catch {
+      // quota fallback to IDB
     }
+    idbSet('csl_memories', memories);
   }, [memories]);
 
-  // Persist tributes
+  // Persist tributes to both localStorage and IndexedDB
   useEffect(() => {
     try {
       localStorage.setItem('csl_tributes', JSON.stringify(tributes));
-    } catch (e) {
-      console.error('Failed to save tributes', e);
+    } catch {
+      // quota fallback to IDB
     }
+    idbSet('csl_tributes', tributes);
   }, [tributes]);
 
-  // Persist teachers
+  // Persist teachers to both localStorage and IndexedDB
   useEffect(() => {
     try {
       localStorage.setItem('csl_teachers', JSON.stringify(teachers));
-    } catch (e) {
-      console.error('Failed to save teachers', e);
+    } catch {
+      // quota fallback to IDB
     }
+    idbSet('csl_teachers', teachers);
   }, [teachers]);
 
-  // Persist padlet notes
+  // Persist padlet notes to both localStorage and IndexedDB
   useEffect(() => {
     try {
       localStorage.setItem('csl_padlet_notes', JSON.stringify(padletNotes));
-    } catch (e) {
-      console.error('Failed to save padlet notes', e);
+    } catch {
+      // quota fallback to IDB
     }
+    idbSet('csl_padlet_notes', padletNotes);
   }, [padletNotes]);
 
   const handleAddMemory = (newMem: MemoryPhoto) => {
@@ -262,7 +294,17 @@ export default function App() {
           onDeleteNote={handleDeletePadletNote}
         />
 
-        {/* Section 5: Digital Guestbook ("Hòm Thư Số Tri Ân - Trọng Tâm") */}
+        {/* Section 5: Cinematic Film Reel & Letter Writing Desk ("Cuộn Phim Tri Ân & Thư Bay Gửi Thầy Cô") */}
+        <CinematicLetterDesk
+          departments={INITIAL_DEPARTMENTS}
+          onAddTribute={handleAddTribute}
+          onScrollToGuestbook={() => {
+            const el = document.getElementById('guestbook');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }}
+        />
+
+        {/* Section 6: Digital Guestbook ("Hòm Thư Số Tri Ân - Trọng Tâm") */}
         <GuestbookSection
           tributes={tributes}
           onAddTribute={handleAddTribute}
