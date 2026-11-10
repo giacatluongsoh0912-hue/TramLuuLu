@@ -1,0 +1,6 @@
+{
+  "name": "Trạm Kết Nối Số - Tri Ân Thầy Cô Chuyên Sơn La",
+  "description": "Trang web tri ân thầy cô giáo Trường THPT Chuyên Sơn La - Trạm kết nối số: Tri ân người dẫn lối, lật giở ký ức, sổ lưu bút và thiệp chúc mừng.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

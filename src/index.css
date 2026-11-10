@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Be Vietnam Pro', system-ui, sans-serif;
+    --font-serif: 'Playfair Display', Georgia, serif;
+    --font-script: 'Caveat', cursive;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #121c16;
+    color: #f7f3e8;
+    overflow-x: hidden;
+  }
+}
+
+.font-serif-vintage {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+.font-script-calligraphy {
+  font-family: 'Dancing Script', 'Caveat', cursive;
+}
+
+.font-body {
+  font-family: 'Be Vietnam Pro', sans-serif;
+}
+
+/* Film strip sprocket holes decoration */
+.film-sprockets {
+  background-image: radial-gradient(#101913 35%, transparent 36%);
+  background-size: 28px 28px;
+  background-position: 0 0;
+}
+
+/* Vintage parchment texture */
+.bg-parchment {
+  background-color: #f6eedb;
+  color: #262118;
+}
+
+.bg-kraft {
+  background-color: #cbbaa1;
+  color: #1f1b14;
+}
+
+/* Subtle film grain overlay */
+.film-grain {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* Custom golden glow */
+.text-golden-glow {
+  text-shadow: 0 0 16px rgba(230, 200, 117, 0.45);
+}
+
+.box-golden-glow {
+  box-shadow: 0 10px 30px -5px rgba(230, 200, 117, 0.25);
+}
+
+/* Cinematic Nature Background from user's wallpaper */
+.cinematic-nature-bg {
+  background-image: 
+    linear-gradient(to bottom, rgba(14, 23, 17, 0.88), rgba(10, 18, 13, 0.84), rgba(12, 20, 15, 0.92)),
+    url('/assets/aistudio/Tr_m_k_t_n_i_s___2__3771c580.png');
+  background-size: cover;
+  background-position: center center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+/* Custom scrollbar for mini playlist */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(236, 203, 118, 0.4);
+  border-radius: 4px;
+}
