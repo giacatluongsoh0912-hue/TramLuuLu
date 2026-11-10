@@ -12,10 +12,10 @@ export interface Track {
 
 const DEFAULT_TRACKS: Track[] = [
   {
-    id: 'track-1',
+    id: 'track-nguoi-gieo-mam-xanh',
     title: 'Người Gieo Mầm Xanh',
-    artist: 'Hòa tấu Tri ân Chuyên Sơn La',
-    synthesizedNotes: [261.63, 329.63, 392.00, 523.25, 440.00, 349.23, 392.00, 329.63], // C E G C A F G E
+    artist: 'Hứa Kim Tuyền x Hoàng Dũng (Official MV)',
+    src: '/assets/aistudio/YTSave.to_YouTube_Media_sj_UDyfoo-A_NG__I-GIEO-M_M-XANH-H_A-KIM-TUY_N-x-HO_NG-D_NG-OFFICIAL-MV_008_256k_f14079fc.m4a',
   },
   {
     id: 'track-2',
@@ -33,7 +33,7 @@ const DEFAULT_TRACKS: Track[] = [
 
 export const MiniMusicPlayer: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
   const [tracks, setTracks] = useState<Track[]>(() => {
     try {
       const saved = localStorage.getItem('csl_custom_tracks');
@@ -46,7 +46,7 @@ export const MiniMusicPlayer: React.FC = () => {
     return DEFAULT_TRACKS;
   });
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
-  const [volume, setVolume] = useState(0.6);
+  const [volume, setVolume] = useState(0.7);
   const [isMuted, setIsMuted] = useState(false);
   const [customFileNote, setCustomFileNote] = useState<string | null>(null);
 
@@ -56,6 +56,42 @@ export const MiniMusicPlayer: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentTrack = tracks[currentTrackIndex] || tracks[0];
+
+  // Robust Autoplay: try playing immediately, and unlock on first user gesture if restricted by browser policy
+  useEffect(() => {
+    const playAudio = () => {
+      if (audioRef.current) {
+        audioRef.current.volume = isMuted ? 0 : volume;
+        audioRef.current
+          .play()
+          .then(() => {
+            setIsPlaying(true);
+          })
+          .catch(() => {
+            const onFirstGesture = () => {
+              if (audioRef.current) {
+                audioRef.current.volume = isMuted ? 0 : volume;
+                audioRef.current
+                  .play()
+                  .then(() => {
+                    setIsPlaying(true);
+                  })
+                  .catch(() => {});
+              }
+              window.removeEventListener('click', onFirstGesture);
+              window.removeEventListener('touchstart', onFirstGesture);
+              window.removeEventListener('keydown', onFirstGesture);
+            };
+
+            window.addEventListener('click', onFirstGesture, { once: true });
+            window.addEventListener('touchstart', onFirstGesture, { once: true });
+            window.addEventListener('keydown', onFirstGesture, { once: true });
+          });
+      }
+    };
+
+    playAudio();
+  }, [currentTrackIndex]);
 
   // Synthesizer for rich, peaceful ambient music when no external audio file is provided
   const playSynthesizedMelody = () => {
@@ -192,6 +228,8 @@ export const MiniMusicPlayer: React.FC = () => {
           ref={audioRef}
           src={currentTrack.src}
           loop
+          autoPlay
+          playsInline
           onEnded={handleNextTrack}
         />
       )}

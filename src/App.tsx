@@ -142,6 +142,14 @@ export default function App() {
     setPadletNotes((prev) => [newNote, ...prev]);
   };
 
+  const handleUpdatePadletNote = (updatedNote: PadletNote) => {
+    setPadletNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? updatedNote : n)));
+  };
+
+  const handleDeletePadletNote = (id: string) => {
+    setPadletNotes((prev) => prev.filter((n) => n.id !== id));
+  };
+
   const handleAddTribute = (newTrib: TributeMessage) => {
     setTributes((prev) => [newTrib, ...prev]);
   };
@@ -242,6 +250,8 @@ export default function App() {
         <PadletWall
           notes={padletNotes}
           onAddNote={handleAddPadletNote}
+          onUpdateNote={handleUpdatePadletNote}
+          onDeleteNote={handleDeletePadletNote}
         />
 
         {/* Section 5: Digital Guestbook ("Hòm Thư Số Tri Ân - Trọng Tâm") */}

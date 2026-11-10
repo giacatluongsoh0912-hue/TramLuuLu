@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   BookOpen,
@@ -15,6 +15,12 @@ import {
   Pause,
   QrCode,
   Flame,
+  Edit3,
+  Save,
+  RotateCcw,
+  PlusCircle,
+  X,
+  Check,
 } from 'lucide-react';
 import { audioPlayer } from '../utils/audioPlayer';
 
@@ -30,6 +36,83 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
   const [activeTab, setActiveTab] = useState<'part1' | 'part2' | 'part3' | 'part4' | 'thi-dua'>('part1');
   const [isPlayingPodcast, setIsPlayingPodcast] = useState(false);
   const [selectedPodcastEpisode, setSelectedPodcastEpisode] = useState(0);
+
+  // Editable Flower Competition Statistics
+  const [flowerStats, setFlowerStats] = useState(() => {
+    try {
+      const saved = localStorage.getItem('csl_flower_competition_stats');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // fallback
+    }
+    return {
+      flower9: 1280,
+      flower10: 895,
+      participationRate: 100,
+      lastUpdated: 'Cập nhật tuần cao điểm 20/11',
+    };
+  });
+
+  const [isEditingStats, setIsEditingStats] = useState(false);
+  const [editFlower9, setEditFlower9] = useState(flowerStats.flower9);
+  const [editFlower10, setEditFlower10] = useState(flowerStats.flower10);
+  const [editRate, setEditRate] = useState(flowerStats.participationRate);
+  const [editNote, setEditNote] = useState(flowerStats.lastUpdated);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('csl_flower_competition_stats', JSON.stringify(flowerStats));
+    } catch {
+      // ignore
+    }
+  }, [flowerStats]);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleAddFlower9 = (amount: number) => {
+    setFlowerStats((prev: typeof flowerStats) => ({ ...prev, flower9: prev.flower9 + amount }));
+    showToast(`Đã thêm +${amount} Hoa Điểm 9 dâng thầy cô!`);
+  };
+
+  const handleAddFlower10 = (amount: number) => {
+    setFlowerStats((prev: typeof flowerStats) => ({ ...prev, flower10: prev.flower10 + amount }));
+    showToast(`Đã thêm +${amount} Hoa Điểm 10 xuất sắc!`);
+  };
+
+  const handleOpenEditStats = () => {
+    setEditFlower9(flowerStats.flower9);
+    setEditFlower10(flowerStats.flower10);
+    setEditRate(flowerStats.participationRate);
+    setEditNote(flowerStats.lastUpdated);
+    setIsEditingStats(true);
+  };
+
+  const handleSaveStats = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFlowerStats({
+      flower9: Math.max(0, Number(editFlower9) || 0),
+      flower10: Math.max(0, Number(editFlower10) || 0),
+      participationRate: Math.min(100, Math.max(0, Number(editRate) || 0)),
+      lastUpdated: editNote.trim() || 'Vừa cập nhật hôm nay',
+    });
+    setIsEditingStats(false);
+    showToast('Đã lưu cập nhật số liệu Bảng Hoa Điểm 9 & 10!');
+  };
+
+  const handleResetDefaultStats = () => {
+    setFlowerStats({
+      flower9: 1280,
+      flower10: 895,
+      participationRate: 100,
+      lastUpdated: 'Cập nhật tuần cao điểm 20/11',
+    });
+    setIsEditingStats(false);
+    showToast('Đã khôi phục số liệu mặc định ban đầu.');
+  };
 
   const podcastEpisodes = [
     {
@@ -473,43 +556,270 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
             </div>
           )}
 
-          {/* VƯỜN HOA ĐIỂM 9 & 10 CHÀO MỪNG 20/11 */}
+          {/* VƯỜN HOA ĐIỂM 9 & 10 CHÀO MỪNG 20/11 (EDITABLE) */}
           {activeTab === 'thi-dua' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between border-b border-[#253d2c] pb-4">
+              {/* Header with Edit Button */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#253d2c] pb-4">
                 <div>
-                  <span className="text-[11px] font-mono uppercase text-[#eccb76] font-semibold">
-                    PHONG TRÀO THI ĐUA HỌC TỐT
+                  <span className="text-[11px] font-mono uppercase text-[#eccb76] font-semibold flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-[#eccb76]" />
+                    <span>PHONG TRÀO THI ĐUA HỌC TỐT</span>
                   </span>
                   <h3 className="font-serif-vintage text-2xl font-bold text-white mt-1">
                     Bảng Hoa Điểm 9, Điểm 10 Dâng Tặng Thầy Cô
                   </h3>
                 </div>
-                <span className="text-xs text-[#b8ad95]">Cập nhật tuần cao điểm 20/11</span>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs text-[#b8ad95] hidden md:inline">
+                    {flowerStats.lastUpdated}
+                  </span>
+                  <button
+                    onClick={handleOpenEditStats}
+                    className="px-3.5 py-2 rounded-lg bg-[#24392b] hover:bg-[#314e3b] text-[#eccb76] border border-[#3e664b] text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+                    title="Chỉnh sửa số liệu hoa điểm 9, điểm 10"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Cập Nhật Số Liệu</span>
+                  </button>
+                </div>
               </div>
 
+              {/* Toast Feedback */}
+              {toastMessage && (
+                <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs text-center font-medium animate-in fade-in duration-300">
+                  ✨ {toastMessage}
+                </div>
+              )}
+
+              {/* Numbers Grid with Quick Add Buttons */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-[#18281e] p-5 rounded-xl border border-[#2b4432] text-center">
-                  <div className="text-3xl mb-2">🌸</div>
-                  <div className="text-2xl font-bold font-mono text-[#eccb76]">1,280</div>
-                  <div className="text-xs font-semibold text-white mt-1">Hoa Điểm 9 Dâng Thầy Cô</div>
-                  <p className="text-[11px] text-[#8ea293] mt-1">Ghi nhận từ các chi đoàn khối 10, 11, 12</p>
+                {/* Hoa Điểm 9 */}
+                <div className="bg-[#18281e] p-5 rounded-2xl border border-[#2b4432] hover:border-[#eccb76]/40 transition-all text-center flex flex-col justify-between group shadow-lg">
+                  <div>
+                    <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">🌸</div>
+                    <div className="text-3xl font-bold font-mono text-[#eccb76] tracking-tight">
+                      {flowerStats.flower9.toLocaleString('vi-VN')}
+                    </div>
+                    <div className="text-xs font-semibold text-white mt-1">
+                      Hoa Điểm 9 Dâng Thầy Cô
+                    </div>
+                    <p className="text-[11px] text-[#8ea293] mt-1">
+                      Ghi nhận từ các chi đoàn khối 10, 11, 12
+                    </p>
+                  </div>
+
+                  {/* Quick Increment Buttons */}
+                  <div className="mt-4 pt-3 border-t border-[#233829] flex items-center justify-center gap-2">
+                    <span className="text-[10px] text-[#b8ad95]">Góp thêm:</span>
+                    <button
+                      onClick={() => handleAddFlower9(1)}
+                      className="px-2 py-1 rounded bg-[#203526] hover:bg-[#2c4936] text-[11px] font-mono text-[#eccb76] font-bold border border-[#31523b] cursor-pointer"
+                      title="Thêm 1 bông hoa điểm 9"
+                    >
+                      +1
+                    </button>
+                    <button
+                      onClick={() => handleAddFlower9(5)}
+                      className="px-2 py-1 rounded bg-[#203526] hover:bg-[#2c4936] text-[11px] font-mono text-[#eccb76] font-bold border border-[#31523b] cursor-pointer"
+                      title="Thêm 5 bông hoa điểm 9"
+                    >
+                      +5
+                    </button>
+                    <button
+                      onClick={() => handleAddFlower9(10)}
+                      className="px-2.5 py-1 rounded bg-[#2a4533] hover:bg-[#365942] text-[11px] font-mono text-white font-bold border border-[#3d694b] cursor-pointer"
+                      title="Thêm 10 bông hoa điểm 9"
+                    >
+                      +10
+                    </button>
+                  </div>
                 </div>
 
-                <div className="bg-[#18281e] p-5 rounded-xl border border-[#2b4432] text-center">
-                  <div className="text-3xl mb-2">🌺</div>
-                  <div className="text-2xl font-bold font-mono text-[#eccb76]">895</div>
-                  <div className="text-xs font-semibold text-white mt-1">Hoa Điểm 10 Xuất Sắc</div>
-                  <p className="text-[11px] text-[#8ea293] mt-1">Những giờ học tốt, ngày học tốt chào mừng 20/11</p>
+                {/* Hoa Điểm 10 */}
+                <div className="bg-[#18281e] p-5 rounded-2xl border border-[#2b4432] hover:border-[#eccb76]/40 transition-all text-center flex flex-col justify-between group shadow-lg">
+                  <div>
+                    <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">🌺</div>
+                    <div className="text-3xl font-bold font-mono text-[#eccb76] tracking-tight">
+                      {flowerStats.flower10.toLocaleString('vi-VN')}
+                    </div>
+                    <div className="text-xs font-semibold text-white mt-1">
+                      Hoa Điểm 10 Xuất Sắc
+                    </div>
+                    <p className="text-[11px] text-[#8ea293] mt-1">
+                      Những giờ học tốt, ngày học tốt chào mừng 20/11
+                    </p>
+                  </div>
+
+                  {/* Quick Increment Buttons */}
+                  <div className="mt-4 pt-3 border-t border-[#233829] flex items-center justify-center gap-2">
+                    <span className="text-[10px] text-[#b8ad95]">Góp thêm:</span>
+                    <button
+                      onClick={() => handleAddFlower10(1)}
+                      className="px-2 py-1 rounded bg-[#203526] hover:bg-[#2c4936] text-[11px] font-mono text-[#eccb76] font-bold border border-[#31523b] cursor-pointer"
+                      title="Thêm 1 bông hoa điểm 10"
+                    >
+                      +1
+                    </button>
+                    <button
+                      onClick={() => handleAddFlower10(5)}
+                      className="px-2 py-1 rounded bg-[#203526] hover:bg-[#2c4936] text-[11px] font-mono text-[#eccb76] font-bold border border-[#31523b] cursor-pointer"
+                      title="Thêm 5 bông hoa điểm 10"
+                    >
+                      +5
+                    </button>
+                    <button
+                      onClick={() => handleAddFlower10(10)}
+                      className="px-2.5 py-1 rounded bg-[#2a4533] hover:bg-[#365942] text-[11px] font-mono text-white font-bold border border-[#3d694b] cursor-pointer"
+                      title="Thêm 10 bông hoa điểm 10"
+                    >
+                      +10
+                    </button>
+                  </div>
                 </div>
 
-                <div className="bg-[#18281e] p-5 rounded-xl border border-[#2b4432] text-center">
-                  <div className="text-3xl mb-2">🏆</div>
-                  <div className="text-2xl font-bold font-mono text-[#eccb76]">100%</div>
-                  <div className="text-xs font-semibold text-white mt-1">Chi Đoàn Tham Gia Thi Đua</div>
-                  <p className="text-[11px] text-[#8ea293] mt-1">Ý thức trách nhiệm và tinh thần tôn sư trọng đạo</p>
+                {/* Tỷ Lệ Chi Đoàn */}
+                <div className="bg-[#18281e] p-5 rounded-2xl border border-[#2b4432] hover:border-[#eccb76]/40 transition-all text-center flex flex-col justify-between group shadow-lg">
+                  <div>
+                    <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">🏆</div>
+                    <div className="text-3xl font-bold font-mono text-[#eccb76] tracking-tight">
+                      {flowerStats.participationRate}%
+                    </div>
+                    <div className="text-xs font-semibold text-white mt-1">
+                      Chi Đoàn Tham Gia Thi Đua
+                    </div>
+                    <p className="text-[11px] text-[#8ea293] mt-1">
+                      Ý thức trách nhiệm và tinh thần tôn sư trọng đạo
+                    </p>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-[#233829]">
+                    <button
+                      onClick={handleOpenEditStats}
+                      className="text-xs text-[#b8ad95] hover:text-[#eccb76] transition-colors flex items-center justify-center gap-1 mx-auto cursor-pointer"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                      <span>Nhấp để sửa tỷ lệ %</span>
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              {/* Edit Modal */}
+              {isEditingStats && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto">
+                  <div className="bg-[#1b2b20] border-2 border-[#eccb76]/60 rounded-2xl max-w-md w-full p-6 shadow-2xl relative text-[#f6eedc]">
+                    <button
+                      onClick={() => setIsEditingStats(false)}
+                      className="absolute top-4 right-4 text-[#cfc5aa] hover:text-white p-1 rounded-lg cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+
+                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[#2d4734]">
+                      <div className="w-8 h-8 rounded-full bg-[#eccb76] text-[#1c1810] flex items-center justify-center font-bold">
+                        <Edit3 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="font-serif-vintage text-lg font-bold text-white">
+                          Cập Nhật Số Liệu Thi Đua
+                        </h4>
+                        <span className="text-xs text-[#b8ad95]">
+                          Chỉnh sửa số hoa điểm 9, điểm 10 và tỷ lệ tham gia
+                        </span>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleSaveStats} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                          🌸 Số Hoa Điểm 9 Dâng Thầy Cô:
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          required
+                          value={editFlower9}
+                          onChange={(e) => setEditFlower9(Number(e.target.value))}
+                          className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-sm text-[#eccb76] font-mono font-bold focus:outline-hidden focus:border-[#eccb76]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                          🌺 Số Hoa Điểm 10 Xuất Sắc:
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          required
+                          value={editFlower10}
+                          onChange={(e) => setEditFlower10(Number(e.target.value))}
+                          className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-sm text-[#eccb76] font-mono font-bold focus:outline-hidden focus:border-[#eccb76]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                          🏆 Tỷ Lệ Chi Đoàn Tham Gia (%):
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          required
+                          value={editRate}
+                          onChange={(e) => setEditRate(Number(e.target.value))}
+                          className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-sm text-[#eccb76] font-mono font-bold focus:outline-hidden focus:border-[#eccb76]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                          Thời gian / Ghi chú cập nhật:
+                        </label>
+                        <input
+                          type="text"
+                          value={editNote}
+                          onChange={(e) => setEditNote(e.target.value)}
+                          placeholder="Ví dụ: Cập nhật tuần 4 cao điểm 20/11"
+                          className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#eccb76]"
+                        />
+                      </div>
+
+                      <div className="pt-3 flex items-center justify-between border-t border-[#2a4332]">
+                        <button
+                          type="button"
+                          onClick={handleResetDefaultStats}
+                          className="px-3 py-1.5 text-xs text-stone-400 hover:text-white flex items-center gap-1 cursor-pointer"
+                          title="Khôi phục số liệu gốc ban đầu"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Đặt lại mặc định</span>
+                        </button>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingStats(false)}
+                            className="px-3 py-1.5 text-xs text-[#b8ad95] hover:text-white cursor-pointer"
+                          >
+                            Hủy
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-4 py-2 text-xs font-bold text-[#1c1810] bg-[#eccb76] hover:bg-[#fad886] rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>Lưu Số Liệu</span>
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

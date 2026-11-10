@@ -46,3 +46,14 @@ Dựa trên yêu cầu và lựa chọn của bạn, hệ thống sẽ thực hi
 - Bổ sung thanh điều hướng nhanh chuyển giữa các mốc thời gian lịch sử và các tổ chuyên môn.
 - Kiểm tra tính tương thích và mượt mà trên cả máy tính, máy tính bảng và điện thoại di động.
 - Xác thực toàn bộ bản dựng với lệnh kiểm tra mã nguồn và biên dịch.
+
+---
+
+## 5. Cập Nhật Số Liệu Phong Trào & Chỉnh Sửa Bảng Padlet Kỷ Niệm
+- **Cập nhật số Bảng Hoa Điểm 9 & Điểm 10**:
+  - Thêm nút *"Cập Nhật Số Liệu"* và các nút tăng nhanh (+1, +5, +10) cho mỗi mục hoa điểm.
+  - Hộp thoại tùy chỉnh số hoa điểm 9, điểm 10, tỷ lệ chi đoàn và ghi chú thời gian, lưu tự động vào `localStorage`.
+- **Chỉnh sửa mẩu giấy Padlet & Kỷ niệm**:
+  - Thêm nút *"Sửa"* và biểu tượng bút chì trên từng thẻ sticky note.
+  - Hộp thoại chỉnh sửa chi tiết tên tác giả, lớp/niên khóa, 5 màu giấy ghi chú, chủ đề phân loại, nội dung kèm khung xem trước và nút xóa mẩu giấy an toàn.
+

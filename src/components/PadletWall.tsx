@@ -10,18 +10,30 @@ import {
   ExternalLink,
   MessageSquare,
   Award,
+  Edit2,
+  Trash2,
+  Check,
+  Save,
 } from 'lucide-react';
 import { PadletNote, validatePadletNote, filterPadletNotes } from '../utils/tributeRules';
 
 interface PadletWallProps {
   notes: PadletNote[];
   onAddNote: (note: PadletNote) => void;
+  onUpdateNote?: (note: PadletNote) => void;
+  onDeleteNote?: (id: string) => void;
 }
 
-export const PadletWall: React.FC<PadletWallProps> = ({ notes, onAddNote }) => {
+export const PadletWall: React.FC<PadletWallProps> = ({
+  notes,
+  onAddNote,
+  onUpdateNote,
+  onDeleteNote,
+}) => {
   const [selectedTag, setSelectedTag] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isAddingNote, setIsAddingNote] = useState<boolean>(false);
+  const [editingNote, setEditingNote] = useState<PadletNote | null>(null);
   const [likesState, setLikesState] = useState<Record<string, number>>({});
 
   // New Note Form State
@@ -31,6 +43,57 @@ export const PadletWall: React.FC<PadletWallProps> = ({ notes, onAddNote }) => {
   const [color, setColor] = useState<'yellow' | 'pink' | 'cyan' | 'purple' | 'orange'>('yellow');
   const [tag, setTag] = useState('lời chúc 20/11');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Edit Note Form State
+  const [editAuthor, setEditAuthor] = useState('');
+  const [editClassName, setEditClassName] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editColor, setEditColor] = useState<'yellow' | 'pink' | 'cyan' | 'purple' | 'orange'>('yellow');
+  const [editTag, setEditTag] = useState('lời chúc 20/11');
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+
+  const handleOpenEdit = (note: PadletNote) => {
+    setEditingNote(note);
+    setEditAuthor(note.author);
+    setEditClassName(note.className);
+    setEditContent(note.content);
+    setEditColor(note.color);
+    setEditTag(note.tag);
+    setEditErrors({});
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingNote) return;
+    const validation = validatePadletNote({ author: editAuthor, className: editClassName, content: editContent });
+    if (!validation.isValid) {
+      setEditErrors(validation.errors);
+      return;
+    }
+
+    const updated: PadletNote = {
+      ...editingNote,
+      author: editAuthor.trim(),
+      className: editClassName.trim(),
+      content: editContent.trim(),
+      color: editColor,
+      tag: editTag,
+    };
+
+    if (onUpdateNote) {
+      onUpdateNote(updated);
+    }
+    setEditingNote(null);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('Bạn có chắc chắn muốn xóa mẩu giấy ghi chú này không?')) {
+      if (onDeleteNote) {
+        onDeleteNote(id);
+      }
+      setEditingNote(null);
+    }
+  };
 
   const tags = [
     { id: 'all', label: 'Tất Cả Mẩu Giấy' },
@@ -253,10 +316,19 @@ export const PadletWall: React.FC<PadletWallProps> = ({ notes, onAddNote }) => {
                     </div>
 
                     <div>
-                      {/* Category Tag Badge */}
-                      <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider opacity-75 pb-2 border-b border-black/10">
-                        <span>{note.className}</span>
-                        <span className="font-bold">#{note.tag}</span>
+                      {/* Category Tag Badge & Edit Action */}
+                      <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider opacity-85 pb-2 border-b border-black/10">
+                        <span className="font-semibold">{note.className}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold">#{note.tag}</span>
+                          <button
+                            onClick={() => handleOpenEdit(note)}
+                            className="p-1 rounded hover:bg-black/15 text-stone-900 transition-colors cursor-pointer"
+                            title="Chỉnh sửa mẩu giấy này"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Content */}
@@ -265,11 +337,19 @@ export const PadletWall: React.FC<PadletWallProps> = ({ notes, onAddNote }) => {
                       </p>
                     </div>
 
-                    {/* Bottom Author & Hearts */}
+                    {/* Bottom Author, Edit link & Hearts */}
                     <div className="pt-2 border-t border-black/10 flex items-center justify-between text-xs">
-                      <span className="font-script-calligraphy text-sm font-bold opacity-90">
-                        ✍️ {note.author}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-script-calligraphy text-sm font-bold opacity-90">
+                          ✍️ {note.author}
+                        </span>
+                        <button
+                          onClick={() => handleOpenEdit(note)}
+                          className="text-[10px] underline opacity-70 hover:opacity-100 cursor-pointer font-sans"
+                        >
+                          Sửa
+                        </button>
+                      </div>
 
                       <button
                         onClick={() => handleToggleLike(note.id, note.likes)}
@@ -440,6 +520,166 @@ export const PadletWall: React.FC<PadletWallProps> = ({ notes, onAddNote }) => {
                 >
                   Dán lên bảng Padlet
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Note */}
+      {editingNote && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#142318] border border-[#3b5e46] rounded-3xl max-w-lg w-full p-6 text-[#eae3d2] shadow-2xl relative my-8 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-[#2a4332] mb-4">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-[#e4c77d]" />
+                <h3 className="text-lg font-serif-vintage font-bold text-[#f7eedc]">
+                  Chỉnh Sửa Mẩu Giấy Kỷ Niệm
+                </h3>
+              </div>
+              <button
+                onClick={() => setEditingNote(null)}
+                className="p-1 rounded-lg text-[#a99e87] hover:text-white hover:bg-[#25392b] transition-all cursor-pointer"
+                title="Đóng"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-[#cfc5aa] block mb-1">
+                    Họ và tên tác giả *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editAuthor}
+                    onChange={(e) => setEditAuthor(e.target.value)}
+                    placeholder="VD: Nguyễn Văn An"
+                    className="w-full bg-[#0d1710] border border-[#2b4433] rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#eccb76]"
+                  />
+                  {editErrors.author && (
+                    <span className="text-[11px] text-red-400 mt-0.5 block">{editErrors.author}</span>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-[#cfc5aa] block mb-1">
+                    Lớp / Niên khóa / Khối *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editClassName}
+                    onChange={(e) => setEditClassName(e.target.value)}
+                    placeholder="VD: 12 Chuyên Toán (K28)"
+                    className="w-full bg-[#0d1710] border border-[#2b4433] rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#eccb76]"
+                  />
+                  {editErrors.className && (
+                    <span className="text-[11px] text-red-400 mt-0.5 block">{editErrors.className}</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#cfc5aa] block mb-1.5">
+                  Màu giấy ghi chú
+                </label>
+                <div className="flex gap-2">
+                  {(['yellow', 'pink', 'cyan', 'purple', 'orange'] as const).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setEditColor(c)}
+                      className={`w-9 h-9 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-center ${
+                        editColor === c ? 'border-white scale-110 shadow-lg' : 'border-transparent opacity-80 hover:opacity-100'
+                      } ${getColorClasses(c)}`}
+                    >
+                      {editColor === c && <Check className="w-4 h-4" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#cfc5aa] block mb-1">
+                  Chủ đề mẩu giấy
+                </label>
+                <select
+                  value={editTag}
+                  onChange={(e) => setEditTag(e.target.value)}
+                  className="w-full bg-[#0d1710] border border-[#2b4433] rounded-xl px-3 py-2 text-xs text-[#eae3d2] focus:outline-hidden focus:border-[#eccb76]"
+                >
+                  <option value="lời chúc 20/11">🌸 Lời Chúc 20/11</option>
+                  <option value="cựu học sinh">🎓 Cựu Học Sinh Các Khóa</option>
+                  <option value="kỷ niệm vui">🎒 Kỷ Niệm Học Trò</option>
+                  <option value="thơ văn tri ân">✍️ Thơ & Tản Văn</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#cfc5aa] block mb-1">
+                  Nội dung mẩu giấy *
+                </label>
+                <textarea
+                  required
+                  rows={4}
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  placeholder="Viết nội dung lời chúc, kỷ niệm hoặc tản văn của bạn..."
+                  className="w-full bg-[#0d1710] border border-[#2b4433] rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#eccb76] resize-none"
+                />
+                {editErrors.content && (
+                  <span className="text-[11px] text-red-400 mt-0.5 block">{editErrors.content}</span>
+                )}
+              </div>
+
+              {/* Live Mini Preview */}
+              <div className="pt-1">
+                <span className="text-[11px] text-[#b8ad95] block mb-1">Xem trước mẩu giấy sau khi chỉnh sửa:</span>
+                <div className={`p-3.5 rounded-lg border text-xs shadow-md ${getColorClasses(editColor)}`}>
+                  <div className="flex justify-between text-[10px] opacity-75 mb-1 font-mono">
+                    <span>{editClassName || 'Lớp của bạn'}</span>
+                    <span>#{editTag}</span>
+                  </div>
+                  <p className="font-serif-vintage italic whitespace-pre-line">
+                    &ldquo;{editContent || 'Nội dung mẩu giấy...'}&rdquo;
+                  </p>
+                  <div className="text-right text-[11px] font-script-calligraphy mt-1">
+                    ✍️ {editAuthor || 'Tên bạn'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-between border-t border-[#2a4332]">
+                <button
+                  type="button"
+                  onClick={() => handleDelete(editingNote.id)}
+                  className="px-3 py-2 text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg cursor-pointer flex items-center gap-1.5 transition-all"
+                  title="Xóa mẩu giấy này khỏi bảng"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Xóa mẩu giấy</span>
+                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingNote(null)}
+                    className="px-4 py-2 text-xs font-medium text-[#c0b59b] hover:text-white rounded-lg cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] rounded-lg cursor-pointer shadow-md flex items-center gap-1.5 transition-all"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Lưu Thay Đổi</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
