@@ -51,6 +51,7 @@ export const PadletWall: React.FC<PadletWallProps> = ({
   const [editColor, setEditColor] = useState<'yellow' | 'pink' | 'cyan' | 'purple' | 'orange'>('yellow');
   const [editTag, setEditTag] = useState('lời chúc 20/11');
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const handleOpenEdit = (note: PadletNote) => {
     setEditingNote(note);
@@ -60,6 +61,7 @@ export const PadletWall: React.FC<PadletWallProps> = ({
     setEditColor(note.color);
     setEditTag(note.tag);
     setEditErrors({});
+    setIsConfirmingDelete(false);
   };
 
   const handleSaveEdit = (e: React.FormEvent) => {
@@ -86,13 +88,12 @@ export const PadletWall: React.FC<PadletWallProps> = ({
     setEditingNote(null);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa mẩu giấy ghi chú này không?')) {
-      if (onDeleteNote) {
-        onDeleteNote(id);
-      }
-      setEditingNote(null);
+  const handleConfirmDelete = (id: string) => {
+    if (onDeleteNote) {
+      onDeleteNote(id);
     }
+    setEditingNote(null);
+    setIsConfirmingDelete(false);
   };
 
   const tags = [
@@ -175,7 +176,7 @@ export const PadletWall: React.FC<PadletWallProps> = ({
   };
 
   return (
-    <section id="padlet" className="py-16 bg-[#121c15] relative border-b border-[#253a2b]">
+    <section id="padlet" className="py-16 bg-[#0c160f]/80 backdrop-blur-md relative border-b border-[#253a2b]/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
@@ -654,15 +655,35 @@ export const PadletWall: React.FC<PadletWallProps> = ({
               </div>
 
               <div className="pt-3 flex items-center justify-between border-t border-[#2a4332]">
-                <button
-                  type="button"
-                  onClick={() => handleDelete(editingNote.id)}
-                  className="px-3 py-2 text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg cursor-pointer flex items-center gap-1.5 transition-all"
-                  title="Xóa mẩu giấy này khỏi bảng"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Xóa mẩu giấy</span>
-                </button>
+                {isConfirmingDelete ? (
+                  <div className="flex items-center gap-2 bg-red-950/80 border border-red-500/50 px-3 py-1.5 rounded-xl animate-in fade-in">
+                    <span className="text-xs text-red-200 font-semibold">Chắc chắn xóa?</span>
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmDelete(editingNote.id)}
+                      className="px-3 py-1 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-lg cursor-pointer transition-colors shadow-sm"
+                    >
+                      Xóa ngay
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsConfirmingDelete(false)}
+                      className="px-2 py-1 text-xs text-[#cfc5aa] hover:text-white rounded-lg cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingDelete(true)}
+                    className="px-3 py-2 text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg cursor-pointer flex items-center gap-1.5 transition-all"
+                    title="Xóa mẩu giấy này khỏi bảng"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xóa mẩu giấy</span>
+                  </button>
+                )}
 
                 <div className="flex gap-2">
                   <button

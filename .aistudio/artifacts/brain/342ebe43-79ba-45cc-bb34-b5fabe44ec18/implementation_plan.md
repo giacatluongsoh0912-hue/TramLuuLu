@@ -57,3 +57,44 @@ Dựa trên yêu cầu và lựa chọn của bạn, hệ thống sẽ thực hi
   - Thêm nút *"Sửa"* và biểu tượng bút chì trên từng thẻ sticky note.
   - Hộp thoại chỉnh sửa chi tiết tên tác giả, lớp/niên khóa, 5 màu giấy ghi chú, chủ đề phân loại, nội dung kèm khung xem trước và nút xóa mẩu giấy an toàn.
 
+---
+
+## 6. Chuẩn Hóa Danh Sách Tổ Chuyên Môn & Văn Phòng (Theo Cơ Cấu Trường THPT Chuyên Sơn La)
+- Cập nhật chuẩn xác các tổ chuyên môn theo đúng cơ cấu nhà trường:
+  1. **Tổ Sinh - Công nghệ**
+  2. **Tổ Lịch sử địa lí**
+  3. **Tổ GDTC - GDQPAN**
+  4. **Văn phòng - GDKT và PL**
+  5. **Tổ Hoá - Thiết bị**
+  6. **Tổ Âm nhạc - Ngoại ngữ**
+  7. **Tổ Vật lý**
+  8. **Tổ Toán - Tin học**
+  9. **Tổ Ngữ Văn**
+  10. **Ban Giám Hiệu**
+- Đồng bộ toàn diện trên thẻ thắp nến tri ân (`TeacherTributes`), thư viện chân dung thầy cô (`TeacherGallery`), và hòm thư số tri ân (`GuestbookSection`).
+
+---
+
+## 7. Chỉnh Sửa Lưu Bút Tri Ân & Nền Thiên Nhiên Toàn Trang
+- **Khả năng chỉnh sửa từng bức lưu bút (`GuestbookSection`)**:
+  - Bổ sung nút **"Sửa"** và **"Chỉnh sửa"** trực tiếp trên từng tấm bưu thiếp lưu bút.
+  - Hộp thoại chỉnh sửa chi tiết: Cho phép người dùng tự do thay đổi tên Thầy Cô nhận lưu bút thành thầy cô thực tế của trường mình, chọn Tổ chuyên môn, sửa tên người gửi, lớp/niên khóa, nội dung lời nhắn, chất liệu bưu thiếp và món quà tri ân.
+  - Có khung xem trước bưu thiếp sau khi sửa và nút **"Xóa lưu bút"** an toàn.
+  - Kết nối trạng thái với `App.tsx` và lưu trữ bền vững vào `localStorage` (`csl_tributes`).
+- **Hình nền thiên nhiên rừng hoa vàng toàn trang (`Trạm kết nối số (2).png`)**:
+  - Áp dụng ảnh hoa cỏ thiên nhiên `/assets/aistudio/Tr_m_k_t_n_i_s___2__3771c580.png` cố định toàn trang.
+  - Chuyển toàn bộ các section (`#hero`, `#contest-framework`, `#scrapbook`, `#teachers`, `#padlet`, `#guestbook`, `#quiz`, `footer`) sang nền bán trong suốt hiệu ứng kính mờ (`backdrop-blur-md`), giúp bức tranh thiên nhiên rực rỡ hiện rõ xuyên suốt toàn bộ chiều dài trang web với độ sâu điện ảnh ấn tượng.
+
+---
+
+## 8. Sửa Lỗi Xóa Lưu Bút (In-UI Deletion Confirmation)
+- **Nguyên nhân**: Trong môi trường iFrame của trình duyệt, hộp thoại `window.confirm()` mặc định bị chặn/vô hiệu hóa bởi chính sách bảo mật sandbox của trình duyệt, khiến thao tác xóa không phản hồi.
+- **Giải pháp**:
+  - Loại bỏ hoàn toàn `window.confirm()` ở cả `GuestbookSection` và `PadletWall`.
+  - Thay thế bằng cơ chế xác nhận nội bộ trực tiếp trên giao diện (`In-UI confirmation state`): Khi bấm "Xóa", hiển thị ngay nút "Chắc chắn xóa? -> Xóa ngay / Hủy" trong hộp thoại và trên từng thẻ bưu thiếp.
+  - Bổ sung nút xóa nhanh hình thùng rác trực tiếp trên mỗi bức bưu thiếp ngoài trang chính.
+  - Thêm thông báo phản hồi (Toast notice) ngay khi xóa thành công.
+
+
+
+

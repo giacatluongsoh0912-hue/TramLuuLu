@@ -64,11 +64,15 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   const departments = [
     { id: 'all', label: 'Tất Cả Thầy Cô' },
     { id: 'bgh', label: 'Ban Giám Hiệu' },
-    { id: 'toan-tin', label: 'Tổ Toán - Tin' },
+    { id: 'toan-tin', label: 'Tổ Toán - Tin học' },
     { id: 'ngu-van', label: 'Tổ Ngữ Văn' },
-    { id: 'ngoai-ngu', label: 'Tổ Ngoại Ngữ' },
-    { id: 'vat-ly', label: 'Tổ Vật Lý' },
-    { id: 'su-dia', label: 'Tổ Lịch Sử - Xã Hội' },
+    { id: 'vat-ly', label: 'Tổ Vật lý' },
+    { id: 'hoa-hoc', label: 'Tổ Hoá - Thiết bị' },
+    { id: 'sinh-hoc', label: 'Tổ Sinh - Công nghệ' },
+    { id: 'ngoai-ngu', label: 'Tổ Âm nhạc - Ngoại ngữ' },
+    { id: 'su-dia', label: 'Tổ Lịch sử địa lí' },
+    { id: 'gdtc-gdqpan', label: 'Tổ GDTC - GDQPAN' },
+    { id: 'van-phong', label: 'Văn phòng - GDKT và PL' },
   ];
 
   const filteredTeachers = teachers.filter((t) => {
@@ -169,7 +173,7 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   };
 
   return (
-    <section id="teachers" className="py-16 bg-[#0f1912]/95 backdrop-blur-md relative border-b border-[#25392c]">
+    <section id="teachers" className="py-16 bg-[#0c160f]/80 backdrop-blur-md relative border-b border-[#25392c]/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}

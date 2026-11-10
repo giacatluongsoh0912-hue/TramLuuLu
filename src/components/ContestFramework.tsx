@@ -143,7 +143,7 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
   };
 
   return (
-    <section id="contest-framework" className="py-16 bg-[#101a13] relative border-b border-[#223528]">
+    <section id="contest-framework" className="py-16 bg-[#0c160f]/80 backdrop-blur-md relative border-b border-[#223528]/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Contest Header Badge */}

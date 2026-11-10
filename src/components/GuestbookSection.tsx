@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Feather, Heart, Search, Sparkles, Filter, X } from 'lucide-react';
+import { Feather, Heart, Search, Sparkles, Filter, X, Edit2, Trash2, Check, Save } from 'lucide-react';
 import { TributeMessage, filterTributes, formatTributeDate, validateTributeMessage } from '../utils/tributeRules';
 
 interface GuestbookSectionProps {
   tributes: TributeMessage[];
   onAddTribute: (tribute: TributeMessage) => void;
+  onUpdateTribute?: (tribute: TributeMessage) => void;
+  onDeleteTribute?: (id: string) => void;
   isComposerOpen: boolean;
   onCloseComposer: () => void;
   onOpenComposer: () => void;
@@ -14,6 +16,8 @@ interface GuestbookSectionProps {
 export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
   tributes,
   onAddTribute,
+  onUpdateTribute,
+  onDeleteTribute,
   isComposerOpen,
   onCloseComposer,
   onOpenComposer,
@@ -32,6 +36,82 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
   const [paperTheme, setPaperTheme] = useState<'parchment' | 'kraft' | 'blackboard' | 'flower'>('parchment');
   const [gift, setGift] = useState<'ban-flower' | 'sunflower' | 'chalk' | 'candle'>('ban-flower');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Edit Tribute State
+  const [editingTribute, setEditingTribute] = useState<TributeMessage | null>(null);
+  const [editSenderName, setEditSenderName] = useState('');
+  const [editAffiliation, setEditAffiliation] = useState('');
+  const [editRecipient, setEditRecipient] = useState('');
+  const [editDepartment, setEditDepartment] = useState('Toàn trường');
+  const [editContent, setEditContent] = useState('');
+  const [editPaperTheme, setEditPaperTheme] = useState<'parchment' | 'kraft' | 'blackboard' | 'flower'>('parchment');
+  const [editGift, setEditGift] = useState<'ban-flower' | 'sunflower' | 'chalk' | 'candle'>('ban-flower');
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [deletingCardId, setDeletingCardId] = useState<string | null>(null);
+  const [toastNotice, setToastNotice] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastNotice(msg);
+    setTimeout(() => {
+      setToastNotice(null);
+    }, 3500);
+  };
+
+  const handleOpenEdit = (trib: TributeMessage) => {
+    setEditingTribute(trib);
+    setEditSenderName(trib.senderName);
+    setEditAffiliation(trib.affiliation);
+    setEditRecipient(trib.recipient);
+    setEditDepartment(trib.department);
+    setEditContent(trib.content);
+    setEditPaperTheme(trib.paperTheme);
+    setEditGift(trib.gift);
+    setEditErrors({});
+    setIsConfirmingDelete(false);
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTribute) return;
+    const validation = validateTributeMessage({
+      senderName: editSenderName,
+      affiliation: editAffiliation,
+      recipient: editRecipient,
+      content: editContent,
+    });
+    if (!validation.isValid) {
+      setEditErrors(validation.errors);
+      return;
+    }
+
+    const updated: TributeMessage = {
+      ...editingTribute,
+      senderName: editSenderName.trim(),
+      affiliation: editAffiliation.trim(),
+      recipient: editRecipient.trim(),
+      department: editDepartment.trim(),
+      content: editContent.trim(),
+      paperTheme: editPaperTheme,
+      gift: editGift,
+    };
+
+    if (onUpdateTribute) {
+      onUpdateTribute(updated);
+    }
+    setEditingTribute(null);
+    showToast('Đã lưu thay đổi bức lưu bút.');
+  };
+
+  const handleConfirmDelete = (id: string) => {
+    if (onDeleteTribute) {
+      onDeleteTribute(id);
+    }
+    setEditingTribute(null);
+    setIsConfirmingDelete(false);
+    setDeletingCardId(null);
+    showToast('Đã xóa bức lưu bút thành công.');
+  };
 
   // Update recipient if changed via props
   React.useEffect(() => {
@@ -116,7 +196,7 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
   };
 
   return (
-    <section id="guestbook" className="py-16 bg-[#16221a] relative border-b border-[#25382b]">
+    <section id="guestbook" className="py-16 bg-[#0c160f]/80 backdrop-blur-md relative border-b border-[#25382b]/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Header */}
@@ -143,6 +223,13 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
           </button>
         </div>
 
+        {/* Toast Feedback Notice */}
+        {toastNotice && (
+          <div className="mb-6 p-3 rounded-xl bg-emerald-950/90 border border-emerald-500/50 text-emerald-200 text-xs text-center font-medium shadow-lg animate-in fade-in duration-300">
+            ✨ {toastNotice}
+          </div>
+        )}
+
         {/* Search & Filter Controls */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-8">
           {/* Search Bar */}
@@ -167,14 +254,16 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
               className="bg-[#111c15] border border-[#2d4635] text-[#ede6d4] rounded-xl px-3 py-2 text-xs focus:outline-hidden focus:border-[#e4c77d] cursor-pointer"
             >
               <option value="all">Tất cả các tổ ({tributes.length})</option>
-              <option value="Toán">Tổ Toán - Tin</option>
-              <option value="Văn">Tổ Ngữ Văn</option>
-              <option value="Lý">Tổ Vật Lý</option>
-              <option value="Hóa">Tổ Hóa Học</option>
-              <option value="Sinh">Tổ Sinh Học</option>
-              <option value="Ngoại Ngữ">Tổ Ngoại Ngữ</option>
-              <option value="Sử - Địa">Tổ Sử - Địa</option>
               <option value="Ban Giám Hiệu">Ban Giám Hiệu</option>
+              <option value="Toán - Tin">Tổ Toán - Tin học</option>
+              <option value="Ngữ Văn">Tổ Ngữ Văn</option>
+              <option value="Vật lý">Tổ Vật lý</option>
+              <option value="Hoá - Thiết bị">Tổ Hoá - Thiết bị</option>
+              <option value="Sinh - Công nghệ">Tổ Sinh - Công nghệ</option>
+              <option value="Âm nhạc - Ngoại ngữ">Tổ Âm nhạc - Ngoại ngữ</option>
+              <option value="Lịch sử địa lí">Tổ Lịch sử địa lí</option>
+              <option value="GDTC - GDQPAN">Tổ GDTC - GDQPAN</option>
+              <option value="Văn phòng - GDKT và PL">Văn phòng - GDKT và PL</option>
               <option value="Toàn trường">Toàn trường</option>
             </select>
           </div>
@@ -219,9 +308,50 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
                         </span>
                       </div>
 
-                      {/* Postage Stamp Aesthetic */}
-                      <div className="px-2 py-1 rounded-xs border-2 border-dashed border-black/25 text-[10px] font-mono uppercase tracking-widest text-center shrink-0 opacity-80">
-                        SON LA · 20/11
+                      {/* Postage Stamp Aesthetic, Quick Edit & Delete */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {deletingCardId === item.id ? (
+                          <div className="flex items-center gap-1 bg-red-900/90 text-white px-2 py-0.5 rounded text-[11px] font-sans border border-red-500 shadow-md animate-in fade-in">
+                            <span className="font-semibold text-red-100">Xóa?</span>
+                            <button
+                              onClick={() => handleConfirmDelete(item.id)}
+                              className="px-1.5 py-0.5 bg-red-600 hover:bg-red-700 font-bold rounded cursor-pointer"
+                              title="Xác nhận xóa bức này"
+                            >
+                              Xóa
+                            </button>
+                            <button
+                              onClick={() => setDeletingCardId(null)}
+                              className="px-1 py-0.5 text-white/80 hover:text-white cursor-pointer"
+                              title="Hủy"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleOpenEdit(item)}
+                              className="px-2 py-1 rounded-md bg-black/10 hover:bg-black/20 text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer opacity-85 hover:opacity-100"
+                              title="Chỉnh sửa tên thầy cô hoặc lời chúc"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              <span>Sửa</span>
+                            </button>
+
+                            <button
+                              onClick={() => setDeletingCardId(item.id)}
+                              className="p-1 rounded-md bg-black/10 hover:bg-red-950/40 text-black/60 hover:text-red-500 transition-colors cursor-pointer"
+                              title="Xóa bức lưu bút này"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+
+                        <div className="px-2 py-1 rounded-xs border-2 border-dashed border-black/25 text-[10px] font-mono uppercase tracking-widest text-center shrink-0 opacity-80">
+                          SON LA · 20/11
+                        </div>
                       </div>
                     </div>
 
@@ -233,7 +363,7 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
                     </div>
                   </div>
 
-                  {/* Card Bottom: Sender, Gift & Like */}
+                  {/* Card Bottom: Sender, Gift & Actions */}
                   <div className="pt-3 border-t border-black/10 flex items-center justify-between gap-3 flex-wrap">
                     <div>
                       <div className="font-script-calligraphy text-base sm:text-lg font-bold">
@@ -247,14 +377,25 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => handleLike(item.id, item.likes)}
-                      className="px-3 py-1.5 rounded-full bg-black/10 hover:bg-black/15 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                      title="Thả tim đồng cảm"
-                    >
-                      <Heart className="w-3.5 h-3.5 fill-[#a83232] text-[#a83232]" />
-                      <span className="font-mono">{likes}</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenEdit(item)}
+                        className="px-2.5 py-1.5 rounded-lg bg-black/10 hover:bg-black/20 text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Chỉnh sửa tên thầy cô, người gửi hoặc lời nhắn"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Chỉnh sửa</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleLike(item.id, item.likes)}
+                        className="px-3 py-1.5 rounded-full bg-black/10 hover:bg-black/15 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Thả tim đồng cảm"
+                      >
+                        <Heart className="w-3.5 h-3.5 fill-[#a83232] text-[#a83232]" />
+                        <span className="font-mono">{likes}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -353,14 +494,16 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
                     className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
                   >
                     <option value="Toàn trường">Toàn trường / Toàn thể Thầy Cô</option>
-                    <option value="Toán">Tổ Toán - Tin</option>
-                    <option value="Văn">Tổ Ngữ Văn</option>
-                    <option value="Lý">Tổ Vật Lý</option>
-                    <option value="Hóa">Tổ Hóa Học</option>
-                    <option value="Sinh">Tổ Sinh Học</option>
-                    <option value="Ngoại Ngữ">Tổ Ngoại Ngữ</option>
-                    <option value="Sử - Địa">Tổ Sử - Địa</option>
                     <option value="Ban Giám Hiệu">Ban Giám Hiệu</option>
+                    <option value="Toán - Tin">Tổ Toán - Tin học</option>
+                    <option value="Ngữ Văn">Tổ Ngữ Văn</option>
+                    <option value="Vật lý">Tổ Vật lý</option>
+                    <option value="Hoá - Thiết bị">Tổ Hoá - Thiết bị</option>
+                    <option value="Sinh - Công nghệ">Tổ Sinh - Công nghệ</option>
+                    <option value="Âm nhạc - Ngoại ngữ">Tổ Âm nhạc - Ngoại ngữ</option>
+                    <option value="Lịch sử địa lí">Tổ Lịch sử địa lí</option>
+                    <option value="GDTC - GDQPAN">Tổ GDTC - GDQPAN</option>
+                    <option value="Văn phòng - GDKT và PL">Văn phòng - GDKT và PL</option>
                   </select>
                 </div>
               </div>
@@ -505,6 +648,314 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
                   <Feather className="w-4 h-4" />
                   <span>Gửi Lưu Bút</span>
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Tribute */}
+      {editingTribute && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-[#18281e] border border-[#3d6248] rounded-2xl max-w-xl w-full p-6 sm:p-8 shadow-2xl relative my-8 text-[#ece5d4] animate-in fade-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setEditingTribute(null)}
+              className="absolute top-5 right-5 text-[#cfc5aa] hover:text-white p-1 rounded-lg cursor-pointer"
+              title="Đóng"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-9 h-9 rounded-full bg-[#cbbaa1] text-[#1e1a12] flex items-center justify-center font-bold">
+                <Edit2 className="w-4 h-4 text-[#1e1a12]" />
+              </div>
+              <div>
+                <h3 className="font-serif-vintage text-xl sm:text-2xl font-bold text-white">
+                  Chỉnh Sửa Bức Lưu Bút Tri Ân
+                </h3>
+                <p className="text-xs text-[#a9b8ad]">
+                  Tùy chỉnh tên thầy cô nhận lưu bút, tổ chuyên môn và lời nhắn gửi theo trường của bạn.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 mt-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Gửi đến Thầy / Cô (hoặc tập thể) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editRecipient}
+                    onChange={(e) => setEditRecipient(e.target.value)}
+                    placeholder="VD: Cô Nguyễn Thị Hoa / Thầy Hiệu trưởng"
+                    className="w-full bg-[#101b13] border border-[#2b4433] rounded-lg px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                  {editErrors.recipient && (
+                    <span className="text-[11px] text-red-400 mt-1 block">{editErrors.recipient}</span>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Tổ chuyên môn
+                  </label>
+                  <select
+                    value={editDepartment}
+                    onChange={(e) => setEditDepartment(e.target.value)}
+                    className="w-full bg-[#101b13] border border-[#2b4433] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  >
+                    <option value="Toàn trường">Toàn trường / Toàn thể Thầy Cô</option>
+                    <option value="Ban Giám Hiệu">Ban Giám Hiệu</option>
+                    <option value="Toán - Tin">Tổ Toán - Tin học</option>
+                    <option value="Ngữ Văn">Tổ Ngữ Văn</option>
+                    <option value="Vật lý">Tổ Vật lý</option>
+                    <option value="Hoá - Thiết bị">Tổ Hoá - Thiết bị</option>
+                    <option value="Sinh - Công nghệ">Tổ Sinh - Công nghệ</option>
+                    <option value="Âm nhạc - Ngoại ngữ">Tổ Âm nhạc - Ngoại ngữ</option>
+                    <option value="Lịch sử địa lí">Tổ Lịch sử địa lí</option>
+                    <option value="GDTC - GDQPAN">Tổ GDTC - GDQPAN</option>
+                    <option value="Văn phòng - GDKT và PL">Văn phòng - GDKT và PL</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Họ và tên của bạn (Tác giả) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editSenderName}
+                    onChange={(e) => setEditSenderName(e.target.value)}
+                    placeholder="VD: Hoàng Minh Đức"
+                    className="w-full bg-[#101b13] border border-[#2b4433] rounded-lg px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                  {editErrors.senderName && (
+                    <span className="text-[11px] text-red-400 mt-1 block">{editErrors.senderName}</span>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Lớp / Niên khóa / Khối *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editAffiliation}
+                    onChange={(e) => setEditAffiliation(e.target.value)}
+                    placeholder="VD: Chuyên Toán K28 / Cựu học sinh"
+                    className="w-full bg-[#101b13] border border-[#2b4433] rounded-lg px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                  {editErrors.affiliation && (
+                    <span className="text-[11px] text-red-400 mt-1 block">{editErrors.affiliation}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Theme & Gift Pickers */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Chất liệu giấy lưu bút
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setEditPaperTheme('parchment')}
+                      className={`p-2 rounded-lg border text-left cursor-pointer transition-colors ${
+                        editPaperTheme === 'parchment'
+                          ? 'border-[#eccb76] bg-[#f4ebd9] text-[#251e15] font-bold'
+                          : 'border-[#2c4735] bg-[#101b13] text-[#cfc5aa]'
+                      }`}
+                    >
+                      📜 Giấy cổ điển
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditPaperTheme('flower')}
+                      className={`p-2 rounded-lg border text-left cursor-pointer transition-colors ${
+                        editPaperTheme === 'flower'
+                          ? 'border-[#f4aab7] bg-[#fdf2f4] text-[#421b24] font-bold'
+                          : 'border-[#2c4735] bg-[#101b13] text-[#cfc5aa]'
+                      }`}
+                    >
+                      🌸 Cánh hoa ban
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditPaperTheme('kraft')}
+                      className={`p-2 rounded-lg border text-left cursor-pointer transition-colors ${
+                        editPaperTheme === 'kraft'
+                          ? 'border-[#d4a373] bg-[#f3e5d0] text-[#3e2714] font-bold'
+                          : 'border-[#2c4735] bg-[#101b13] text-[#cfc5aa]'
+                      }`}
+                    >
+                      🪵 Giấy Kraft mộc
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditPaperTheme('blackboard')}
+                      className={`p-2 rounded-lg border text-left cursor-pointer transition-colors ${
+                        editPaperTheme === 'blackboard'
+                          ? 'border-[#8ea293] bg-[#1d3023] text-white font-bold'
+                          : 'border-[#2c4735] bg-[#101b13] text-[#cfc5aa]'
+                      }`}
+                    >
+                      🌱 Bảng xanh phấn trắng
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Món quà tri ân gửi kèm
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setEditGift('ban-flower')}
+                      className={`p-2 rounded-lg border text-left cursor-pointer transition-colors ${
+                        editGift === 'ban-flower'
+                          ? 'border-[#eccb76] bg-[#22392b] text-[#f8ecd2] font-bold'
+                          : 'border-[#2c4735] bg-[#101b13] text-[#cfc5aa]'
+                      }`}
+                    >
+                      🌸 Nhành hoa ban
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditGift('sunflower')}
+                      className={`p-2 rounded-lg border text-left cursor-pointer transition-colors ${
+                        editGift === 'sunflower'
+                          ? 'border-[#eccb76] bg-[#22392b] text-[#f8ecd2] font-bold'
+                          : 'border-[#2c4735] bg-[#101b13] text-[#cfc5aa]'
+                      }`}
+                    >
+                      🌻 Hướng dương
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditGift('chalk')}
+                      className={`p-2 rounded-lg border text-left cursor-pointer transition-colors ${
+                        editGift === 'chalk'
+                          ? 'border-[#eccb76] bg-[#22392b] text-[#f8ecd2] font-bold'
+                          : 'border-[#2c4735] bg-[#101b13] text-[#cfc5aa]'
+                      }`}
+                    >
+                      ✏️ Viên phấn trắng
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditGift('candle')}
+                      className={`p-2 rounded-lg border text-left cursor-pointer transition-colors ${
+                        editGift === 'candle'
+                          ? 'border-[#eccb76] bg-[#22392b] text-[#f8ecd2] font-bold'
+                          : 'border-[#2c4735] bg-[#101b13] text-[#cfc5aa]'
+                      }`}
+                    >
+                      🕯️ Ngọn nến ấm
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                  Nội dung bức lưu bút *
+                </label>
+                <textarea
+                  required
+                  rows={4}
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  placeholder="Viết những lời tri ân, kỷ niệm hoặc lời chúc chân thành gửi tới thầy cô..."
+                  className="w-full bg-[#101b13] border border-[#2b4433] rounded-lg px-3.5 py-2.5 text-xs text-white focus:outline-hidden focus:border-[#e4c77d] resize-none"
+                />
+                {editErrors.content && (
+                  <span className="text-[11px] text-red-400 mt-1 block">{editErrors.content}</span>
+                )}
+              </div>
+
+              {/* Live Card Preview */}
+              <div className="pt-1">
+                <span className="text-[11px] text-[#b8ad95] block mb-1">Xem trước bưu thiếp sau khi sửa:</span>
+                <div className={`p-4 rounded-xl border text-xs shadow-md ${getThemeStyle(editPaperTheme)}`}>
+                  <div className="flex justify-between pb-2 border-b border-black/10">
+                    <div>
+                      <div className="text-[10px] font-mono tracking-wider opacity-75 uppercase">
+                        Gửi đến: <span className="font-bold underline">{editRecipient || 'Tên Thầy Cô'}</span>
+                      </div>
+                      <span className="text-[11px] font-semibold block opacity-90">
+                        {editDepartment !== 'Toàn trường' ? `Tổ ${editDepartment}` : 'Toàn trường'}
+                      </span>
+                    </div>
+                    <div className="px-1.5 py-0.5 rounded border border-dashed border-black/25 text-[9px] font-mono">
+                      SON LA · 20/11
+                    </div>
+                  </div>
+                  <p className="font-serif-vintage italic my-2 leading-relaxed whitespace-pre-line">
+                    &ldquo;{editContent || 'Nội dung bức lưu bút...'}&rdquo;
+                  </p>
+                  <div className="text-right font-script-calligraphy text-sm font-bold">
+                    ✍️ {editSenderName || 'Tên bạn'} ({editAffiliation || 'Lớp của bạn'})
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-between border-t border-[#2a4332]">
+                {isConfirmingDelete ? (
+                  <div className="flex items-center gap-2 bg-red-950/80 border border-red-500/50 px-3 py-1.5 rounded-xl animate-in fade-in">
+                    <span className="text-xs text-red-200 font-semibold">Chắc chắn xóa?</span>
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmDelete(editingTribute.id)}
+                      className="px-3 py-1 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-lg cursor-pointer transition-colors shadow-sm"
+                    >
+                      Xóa ngay
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsConfirmingDelete(false)}
+                      className="px-2 py-1 text-xs text-[#cfc5aa] hover:text-white rounded-lg cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingDelete(true)}
+                    className="px-3 py-2 text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg cursor-pointer flex items-center gap-1.5 transition-all"
+                    title="Xóa bức lưu bút này"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xóa lưu bút</span>
+                  </button>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingTribute(null)}
+                    className="px-4 py-2 text-xs font-medium text-[#c0b59b] hover:text-white rounded-lg cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Lưu Thay Đổi</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>

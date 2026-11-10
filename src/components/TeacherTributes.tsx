@@ -21,10 +21,10 @@ export const TeacherTributes: React.FC<TeacherTributesProps> = ({
 
   const [recentlyLit, setRecentlyLit] = useState<string | null>(null);
 
-  const handleLightCandle = (deptId: string, deptName: string) => {
+  const handleLightCandle = (deptId: string, deptName: string, initialCandles: number) => {
     setCandles((prev) => ({
       ...prev,
-      [deptId]: (prev[deptId] || 0) + 1,
+      [deptId]: (prev[deptId] !== undefined ? prev[deptId] : initialCandles) + 1,
     }));
     setRecentlyLit(deptName);
     setTimeout(() => {
@@ -32,10 +32,13 @@ export const TeacherTributes: React.FC<TeacherTributesProps> = ({
     }, 3000);
   };
 
-  const totalCandles = Object.values(candles).reduce((a, b) => a + b, 0);
+  const totalCandles = departments.reduce(
+    (sum, d) => sum + (candles[d.id] !== undefined ? candles[d.id] : d.candleCount),
+    0
+  );
 
   return (
-    <section id="teachers" className="py-16 bg-[#131f18] relative border-b border-[#24392b]">
+    <section id="teachers" className="py-16 bg-[#0d1710]/80 backdrop-blur-md relative border-b border-[#24392b]/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-12">
@@ -109,7 +112,7 @@ export const TeacherTributes: React.FC<TeacherTributesProps> = ({
                 {/* Card Actions: Light Candle & Send Letter */}
                 <div className="mt-5 pt-3 border-t border-[#243a2b] flex items-center justify-between gap-2">
                   <button
-                    onClick={() => handleLightCandle(dept.id, dept.name)}
+                    onClick={() => handleLightCandle(dept.id, dept.name, dept.candleCount)}
                     className="flex-1 py-2 px-3 rounded-lg bg-[#22392b] hover:bg-[#2c4a37] text-xs font-semibold text-[#f8edd2] transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-[#3b5e47] active:scale-95"
                     title="Thắp sáng một ngọn nến tri ân"
                   >

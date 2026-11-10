@@ -154,6 +154,14 @@ export default function App() {
     setTributes((prev) => [newTrib, ...prev]);
   };
 
+  const handleUpdateTribute = (updatedTrib: TributeMessage) => {
+    setTributes((prev) => prev.map((t) => (t.id === updatedTrib.id ? updatedTrib : t)));
+  };
+
+  const handleDeleteTribute = (id: string) => {
+    setTributes((prev) => prev.filter((t) => t.id !== id));
+  };
+
   const handleOpenComposerWithRecipient = (deptName: string) => {
     setPreselectedRecipient(`Thầy Cô ${deptName}`);
     setIsComposerOpen(true);
@@ -258,6 +266,8 @@ export default function App() {
         <GuestbookSection
           tributes={tributes}
           onAddTribute={handleAddTribute}
+          onUpdateTribute={handleUpdateTribute}
+          onDeleteTribute={handleDeleteTribute}
           isComposerOpen={isComposerOpen}
           onCloseComposer={() => setIsComposerOpen(false)}
           onOpenComposer={() => {

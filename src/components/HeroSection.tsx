@@ -22,7 +22,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const contestStatus = getContestStatus(Date.now(), contestEnd);
 
   return (
-    <section id="hero" className="relative w-full bg-[#0e1711] overflow-hidden">
+    <section id="hero" className="relative w-full bg-[#0b140e]/75 backdrop-blur-md overflow-hidden">
       {/* Contest Campaign Banner Strip */}
       <div className="bg-[#18291f] border-b border-[#2d4735] py-2 px-4 text-xs">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-[#dcd4be]">

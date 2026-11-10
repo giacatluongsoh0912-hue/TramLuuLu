@@ -67,7 +67,7 @@ export const QuizNostalgia: React.FC<QuizNostalgiaProps> = ({ onOpenCardMaker })
   const archetype = getResultArchetype();
 
   return (
-    <section id="quiz" className="py-16 bg-[#121c16] relative border-b border-[#24392a]">
+    <section id="quiz" className="py-16 bg-[#0c160f]/80 backdrop-blur-md relative border-b border-[#24392a]/80">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Header */}
