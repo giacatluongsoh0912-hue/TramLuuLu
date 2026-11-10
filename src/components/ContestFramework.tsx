@@ -21,6 +21,7 @@ import {
   PlusCircle,
   X,
   Check,
+  ExternalLink,
 } from 'lucide-react';
 import { audioPlayer } from '../utils/audioPlayer';
 
@@ -412,18 +413,45 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
                     Nhịp Cầu Nối Cựu Học Sinh Các Khóa K28 - K32
                   </h3>
                 </div>
-                <button
-                  onClick={onOpenComposer}
-                  className="px-4 py-2 rounded-lg bg-[#cbbaa1] hover:bg-[#dbccb5] text-[#1c1810] text-xs font-bold transition-all cursor-pointer shadow-md"
-                >
-                  Gửi thư vào Hòm thư số
-                </button>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="https://forms.gle/4c98L5pQeyBAnte9A"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-lg bg-[#cbbaa1] hover:bg-[#dbccb5] text-[#1c1810] text-xs font-bold transition-all cursor-pointer shadow-md flex items-center gap-1.5 active:scale-95"
+                    title="Mở Google Forms Hòm Thư Số Tri Ân 20/11"
+                  >
+                    <span>Gửi thư vào Hòm thư số</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                  <button
+                    onClick={onOpenComposer}
+                    className="px-3 py-2 rounded-lg bg-[#1a2d21] hover:bg-[#253f2e] text-[#cfc5aa] hover:text-white text-xs font-semibold border border-[#30523a] transition-all cursor-pointer hidden sm:inline-flex"
+                    title="Viết lời tri ân trực tiếp trên trang web"
+                  >
+                    Viết trên web
+                  </button>
+                </div>
               </div>
 
               <div className="bg-[#111c15] p-6 rounded-xl border border-[#2a4332]">
-                <p className="font-body text-xs sm:text-sm text-[#ded7c3] leading-relaxed mb-4">
-                  Hòm thư số kết nối cựu học sinh được tích hợp mở, cho phép cựu học sinh chuyên Sơn La khắp mọi miền Tổ quốc và quốc tế gửi lời chúc, tâm sự, ảnh kỷ niệm xưa và lời tri ân trực tiếp tới thầy cô giảng dạy.
-                </p>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-[#233527]">
+                  <p className="font-body text-xs sm:text-sm text-[#ded7c3] leading-relaxed">
+                    Hòm thư số kết nối cựu học sinh được mở trực tiếp qua biểu mẫu Google Forms hoặc viết trực tiếp trên trang web, cho phép cựu học sinh Chuyên Sơn La khắp mọi miền Tổ quốc và quốc tế gửi lời chúc, tâm sự, ảnh kỷ niệm xưa và lời tri ân trực tiếp tới thầy cô giảng dạy.
+                  </p>
+                </div>
+                <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-[#9fb3a4]">Biểu mẫu chính thức:</span>
+                  <a
+                    href="https://forms.gle/4c98L5pQeyBAnte9A"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[#eccb76] hover:underline font-mono"
+                  >
+                    <span>forms.gle/4c98L5pQeyBAnte9A</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
                   <div className="bg-[#18281e] p-3 rounded-lg border border-[#2d4635]">
                     <div className="font-mono text-xl font-bold text-[#eccb76]">150+</div>

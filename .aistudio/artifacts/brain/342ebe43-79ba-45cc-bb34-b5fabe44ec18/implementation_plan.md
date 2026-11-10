@@ -95,6 +95,14 @@ Dựa trên yêu cầu và lựa chọn của bạn, hệ thống sẽ thực hi
   - Bổ sung nút xóa nhanh hình thùng rác trực tiếp trên mỗi bức bưu thiếp ngoài trang chính.
   - Thêm thông báo phản hồi (Toast notice) ngay khi xóa thành công.
 
+---
+
+## 9. Tích Hợp Biểu Mẫu Google Forms Vào Nút "Hòm Thư Số"
+- Đã liên kết nút **"Gửi thư vào Hòm thư số"** tại Phần 3 của Khung cuộc thi (`ContestFramework`) tới biểu mẫu Google Forms chính thức của nhà trường: `https://forms.gle/4c98L5pQeyBAnte9A`.
+- Mở an toàn trong tab mới (`target="_blank"`, `rel="noopener noreferrer"`) với biểu tượng `ExternalLink`.
+- Đồng thời bổ sung nút tùy chọn **"Viết trên web"** để học sinh có thể lựa chọn linh hoạt giữa việc điền Google Forms hoặc tự tay thiết kế bưu thiếp tri ân trực tiếp trên trang web.
+
+
 
 
 
