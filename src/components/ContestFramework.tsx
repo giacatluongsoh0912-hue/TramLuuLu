@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Sparkles,
   BookOpen,
@@ -22,8 +22,48 @@ import {
   X,
   Check,
   ExternalLink,
+  Plus,
+  Trash2,
+  Edit2,
+  Upload,
+  Camera,
+  AlertTriangle,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { audioPlayer } from '../utils/audioPlayer';
+import { compressImage, idbGet, idbSet } from '../utils/imageStorage';
+
+export interface TeacherStudentMoment {
+  id: string;
+  tag: string;
+  title: string;
+  description: string;
+  imageSrc: string;
+}
+
+const DEFAULT_PART2_MOMENTS: TeacherStudentMoment[] = [
+  {
+    id: 'p2-1',
+    tag: 'KHỐI 12',
+    title: 'Những Tiết Sinh Hoạt Ấm Áp Của K31',
+    description: 'Lời dặn dò ân cần trước kỳ thi đại học, những cái ôm siết chặt và sự quan tâm như của người cha, người mẹ thứ hai.',
+    imageSrc: '/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png',
+  },
+  {
+    id: 'p2-2',
+    tag: 'NGOẠI KHÓA',
+    title: 'Vòng Xòe Đoàn Kết & Hội Trại Sam Si',
+    description: 'Nơi thầy trò cùng hòa chung một điệu múa xòe, đốt lên ngọn lửa trại bập bùng thắp sáng ước mơ tuổi trẻ.',
+    imageSrc: '/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png',
+  },
+  {
+    id: 'p2-3',
+    tag: 'GIỜ HỌC TỐT',
+    title: 'Say Mê Từng Giờ Học Đổi Mới Sáng Tạo',
+    description: 'Các tiết thực hành STEM, dự án trải nghiệm văn học và những giờ học không khoảng cách giữa thầy và trò.',
+    imageSrc: '/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png',
+  },
+];
 
 interface ContestFrameworkProps {
   onOpenComposer: () => void;
@@ -113,6 +153,134 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
     });
     setIsEditingStats(false);
     showToast('Đã khôi phục số liệu mặc định ban đầu.');
+  };
+
+  // Part 2: Dynamic Teacher-Student Moments State
+  const [moments, setMoments] = useState<TeacherStudentMoment[]>(() => {
+    try {
+      const saved = localStorage.getItem('csl_contest_part2_moments');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // fallback
+    }
+    return DEFAULT_PART2_MOMENTS;
+  });
+
+  // IndexedDB Hydration for moments
+  useEffect(() => {
+    (async () => {
+      try {
+        const idbMoments = await idbGet<TeacherStudentMoment[]>('csl_contest_part2_moments');
+        if (idbMoments && Array.isArray(idbMoments) && idbMoments.length > 0) {
+          setMoments(idbMoments);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  // Persist moments
+  useEffect(() => {
+    try {
+      localStorage.setItem('csl_contest_part2_moments', JSON.stringify(moments));
+    } catch {
+      // fallback
+    }
+    idbSet('csl_contest_part2_moments', moments);
+  }, [moments]);
+
+  // Modal states for Part 2 moments
+  const [isAddingMoment, setIsAddingMoment] = useState(false);
+  const [editingMoment, setEditingMoment] = useState<TeacherStudentMoment | null>(null);
+  const [deletingMomentId, setDeletingMomentId] = useState<string | null>(null);
+
+  // Form states for Part 2
+  const [momentTitle, setMomentTitle] = useState('');
+  const [momentTag, setMomentTag] = useState('Khối 10');
+  const [momentCustomTag, setMomentCustomTag] = useState('');
+  const [momentDesc, setMomentDesc] = useState('');
+  const [momentImage, setMomentImage] = useState('/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png');
+  const [momentMethod, setMomentMethod] = useState<'upload' | 'url'>('upload');
+  const [momentUrl, setMomentUrl] = useState('');
+  const momentFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenAddMoment = () => {
+    setMomentTitle('');
+    setMomentTag('Khối 10');
+    setMomentCustomTag('');
+    setMomentDesc('');
+    setMomentImage('/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png');
+    setMomentMethod('upload');
+    setMomentUrl('');
+    setEditingMoment(null);
+    setIsAddingMoment(true);
+  };
+
+  const handleOpenEditMoment = (m: TeacherStudentMoment) => {
+    setEditingMoment(m);
+    setMomentTitle(m.title);
+    setMomentTag(m.tag);
+    setMomentCustomTag('');
+    setMomentDesc(m.description);
+    setMomentImage(m.imageSrc);
+    setMomentMethod('upload');
+    setMomentUrl(m.imageSrc.startsWith('data:') ? '' : m.imageSrc);
+    setIsAddingMoment(true);
+  };
+
+  const handleSaveMoment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!momentTitle.trim() || !momentDesc.trim()) return;
+
+    const finalImage = momentMethod === 'url' && momentUrl.trim() ? momentUrl.trim() : momentImage;
+    const finalTag = momentTag === 'custom' && momentCustomTag.trim() ? momentCustomTag.trim() : momentTag;
+
+    if (editingMoment) {
+      setMoments((prev) =>
+        prev.map((m) =>
+          m.id === editingMoment.id
+            ? { ...m, title: momentTitle.trim(), tag: finalTag, description: momentDesc.trim(), imageSrc: finalImage }
+            : m
+        )
+      );
+      showToast('Đã cập nhật khoảnh khắc thành công!');
+    } else {
+      const newM: TeacherStudentMoment = {
+        id: 'p2-' + Date.now(),
+        tag: finalTag,
+        title: momentTitle.trim(),
+        description: momentDesc.trim(),
+        imageSrc: finalImage,
+      };
+      setMoments((prev) => [newM, ...prev]);
+      showToast('Đã đăng khoảnh khắc mới thành công!');
+    }
+    setIsAddingMoment(false);
+    setEditingMoment(null);
+  };
+
+  const handleDeleteMoment = (id: string) => {
+    setMoments((prev) => prev.filter((m) => m.id !== id));
+    setDeletingMomentId(null);
+    showToast('Đã xóa khoảnh khắc!');
+  };
+
+  const handleMomentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file, 900, 900, 0.82);
+      setMomentImage(compressed);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setMomentImage(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const podcastEpisodes = [
@@ -333,7 +501,7 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
           {/* PHẦN 2: THẦY TRÒ CHUYÊN SƠN LA */}
           {activeTab === 'part2' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between border-b border-[#253d2c] pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#253d2c] pb-4">
                 <div>
                   <span className="text-[11px] font-mono uppercase text-[#eccb76] font-semibold">
                     PHẦN 2 · THẦY TRÒ CHUYÊN SƠN LA
@@ -341,62 +509,128 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
                   <h3 className="font-serif-vintage text-2xl font-bold text-white mt-1">
                     Khoảnh Khắc Đời Thường & Kỷ Niệm Tiết Học
                   </h3>
+                  <p className="text-xs text-[#b8ad95] mt-1 font-body">
+                    Góc lưu giữ những hình ảnh vui tươi, ấm áp giữa thầy và trò các thế hệ Chuyên Sơn La.
+                  </p>
                 </div>
-                <span className="text-xs text-[#b8ad95]">Khối 10 · Khối 11 · Khối 12</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleOpenAddMoment}
+                    className="px-3.5 py-2 rounded-lg bg-[#27422f] hover:bg-[#34583f] text-[#eccb76] hover:text-white border border-[#3e664b] text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+                    title="Đăng thêm hình ảnh và khoảnh khắc thầy trò vui tươi"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Đăng khoảnh khắc mới</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-[#18281e] p-4 rounded-xl border border-[#2a4332] shadow-md">
-                  <div className="aspect-4/3 rounded-lg overflow-hidden bg-[#101a13] mb-3">
-                    <img
-                      src="/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png"
-                      alt="Giờ sinh hoạt chủ nhiệm"
-                      className="w-full h-full object-cover object-[88%_72%]"
-                    />
-                  </div>
-                  <span className="text-[11px] font-mono text-[#eccb76]">KHỐI 12</span>
-                  <h4 className="font-serif-vintage text-base font-bold text-white mt-1">
-                    Những Tiết Sinh Hoạt Ấm Áp Của K31
-                  </h4>
-                  <p className="font-body text-xs text-[#b8ab95] mt-1.5 leading-relaxed">
-                    Lời dặn dò ân cần trước kỳ thi đại học, những cái ôm siết chặt và sự quan tâm như của người cha, người mẹ thứ hai.
-                  </p>
+              {moments.length === 0 ? (
+                <div className="text-center py-12 bg-[#121e16] rounded-xl border border-dashed border-[#2d4635] p-6">
+                  <Camera className="w-8 h-8 text-[#eccb76]/60 mx-auto mb-2" />
+                  <p className="text-sm font-serif-vintage text-white">Chưa có khoảnh khắc nào</p>
+                  <p className="text-xs text-[#b8ad95] mt-1">Hãy là người đầu tiên đăng khoảnh khắc thầy trò vui tươi!</p>
+                  <button
+                    onClick={handleOpenAddMoment}
+                    className="mt-4 px-4 py-2 rounded-lg bg-[#eccb76] text-[#1c1810] text-xs font-bold cursor-pointer"
+                  >
+                    Đăng ngay
+                  </button>
                 </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {moments.map((m) => (
+                    <div
+                      key={m.id}
+                      className="bg-[#18281e] p-4 rounded-xl border border-[#2a4332] shadow-md hover:border-[#436e4f] transition-all flex flex-col justify-between group relative overflow-hidden"
+                    >
+                      <div>
+                        <div className="aspect-4/3 rounded-lg overflow-hidden bg-[#101a13] mb-3 relative">
+                          <img
+                            src={m.imageSrc}
+                            alt={m.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = '/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png';
+                            }}
+                          />
+                          {/* Quick action buttons on photo */}
+                          <div className="absolute top-2 right-2 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity z-10">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditMoment(m)}
+                              title="Chỉnh sửa khoảnh khắc này"
+                              className="p-1.5 rounded-full bg-black/60 hover:bg-[#eccb76] text-white hover:text-[#1a160f] transition-all cursor-pointer shadow-md"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingMomentId(m.id)}
+                              title="Xóa khoảnh khắc này"
+                              className="p-1.5 rounded-full bg-black/60 hover:bg-rose-600 text-white transition-all cursor-pointer shadow-md"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
 
-                <div className="bg-[#18281e] p-4 rounded-xl border border-[#2a4332] shadow-md">
-                  <div className="aspect-4/3 rounded-lg overflow-hidden bg-[#101a13] mb-3">
-                    <img
-                      src="/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png"
-                      alt="Hoạt động ngoại khóa & Thể thao"
-                      className="w-full h-full object-cover object-[10%_10%]"
-                    />
-                  </div>
-                  <span className="text-[11px] font-mono text-[#eccb76]">NGOẠI KHÓA</span>
-                  <h4 className="font-serif-vintage text-base font-bold text-white mt-1">
-                    Vòng Xòe Đoàn Kết & Hội Trại Sam Si
-                  </h4>
-                  <p className="font-body text-xs text-[#b8ab95] mt-1.5 leading-relaxed">
-                    Nơi thầy trò cùng hòa chung một điệu múa xòe, đốt lên ngọn lửa trại bập bùng thắp sáng ước mơ tuổi trẻ.
-                  </p>
-                </div>
+                          {/* Delete Confirmation Overlay on card */}
+                          {deletingMomentId === m.id && (
+                            <div className="absolute inset-0 bg-[#0d1610]/95 backdrop-blur-xs z-20 p-3 flex flex-col items-center justify-center text-center animate-fade-in border-2 border-rose-500/60">
+                              <AlertTriangle className="w-6 h-6 text-rose-400 mb-1" />
+                              <h4 className="font-serif-vintage text-xs font-bold text-white mb-1">
+                                Xác nhận xóa?
+                              </h4>
+                              <p className="text-[11px] text-[#cfc5aa] mb-2 leading-tight line-clamp-2">
+                                Bạn muốn xóa bài đăng này?
+                              </p>
+                              <div className="flex items-center gap-2 w-full">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMoment(m.id)}
+                                  className="flex-1 py-1 px-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold cursor-pointer"
+                                >
+                                  Xóa
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingMomentId(null)}
+                                  className="flex-1 py-1 px-2 rounded-lg bg-[#253f2e] text-[#cfc5aa] text-[11px] font-medium cursor-pointer"
+                                >
+                                  Hủy
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
 
-                <div className="bg-[#18281e] p-4 rounded-xl border border-[#2a4332] shadow-md">
-                  <div className="aspect-4/3 rounded-lg overflow-hidden bg-[#101a13] mb-3">
-                    <img
-                      src="/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png"
-                      alt="Tiết học say mê bên bục giảng"
-                      className="w-full h-full object-cover object-[62%_35%]"
-                    />
-                  </div>
-                  <span className="text-[11px] font-mono text-[#eccb76]">GIỜ HỌC TỐT</span>
-                  <h4 className="font-serif-vintage text-base font-bold text-white mt-1">
-                    Say Mê Từng Giờ Học Đổi Mới Sáng Tạo
-                  </h4>
-                  <p className="font-body text-xs text-[#b8ab95] mt-1.5 leading-relaxed">
-                    Các tiết thực hành STEM, dự án trải nghiệm văn học và những giờ học không khoảng cách giữa thầy và trò.
-                  </p>
+                        <span className="text-[11px] font-mono text-[#eccb76] font-semibold uppercase tracking-wider">
+                          {m.tag}
+                        </span>
+                        <h4 className="font-serif-vintage text-base font-bold text-white mt-1 group-hover:text-[#eccb76] transition-colors">
+                          {m.title}
+                        </h4>
+                        <p className="font-body text-xs text-[#b8ab95] mt-1.5 leading-relaxed">
+                          {m.description}
+                        </p>
+                      </div>
+
+                      <div className="mt-3 pt-2 border-t border-[#253a2b] flex items-center justify-between text-[11px] text-[#86998b]">
+                        <span>Chuyên Sơn La</span>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditMoment(m)}
+                          className="text-[#eccb76] hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                          <span>Chỉnh sửa</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -861,6 +1095,201 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
         </div>
 
       </div>
+      {/* Modal Add / Edit Part 2 Moment */}
+      {isAddingMoment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-[#1b2b20] border-2 border-[#e4c77d]/60 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative my-6 text-[#f6eedc]">
+            <button
+              onClick={() => {
+                setIsAddingMoment(false);
+                setEditingMoment(null);
+              }}
+              className="absolute top-4 right-4 text-[#cfc5aa] hover:text-white p-1 rounded-lg cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[#2d4734]">
+              <div className="w-8 h-8 rounded-full bg-[#eccb76] text-[#1c1810] flex items-center justify-center font-bold">
+                <Camera className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-serif-vintage text-lg font-bold text-white">
+                  {editingMoment ? 'Chỉnh Sửa Khoảnh Khắc Thầy Trò' : 'Đăng Khoảnh Khắc Thầy Trò Mới'}
+                </h3>
+                <span className="text-xs text-[#b8ad95]">
+                  Chia sẻ những hình ảnh vui tươi, kỷ niệm tiết học và ngoại khóa
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveMoment} className="space-y-4">
+              {/* Photo Preview & Method */}
+              <div>
+                <label className="block text-xs font-semibold text-[#ded5c0] mb-1.5">
+                  Hình ảnh khoảnh khắc:
+                </label>
+                <div className="relative aspect-video rounded-xl overflow-hidden bg-[#101b13] border-2 border-[#375a40] flex items-center justify-center mb-3">
+                  <img
+                    src={momentMethod === 'url' && momentUrl ? momentUrl : momentImage}
+                    alt="Xem trước hình ảnh"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png';
+                    }}
+                  />
+                  <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-xs px-2.5 py-1 rounded text-[11px] text-[#eccb76]">
+                    Xem trước trực tiếp
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setMomentMethod('upload')}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border ${
+                      momentMethod === 'upload'
+                        ? 'bg-[#cbbaa1] text-[#1a160f] border-[#cbbaa1]'
+                        : 'bg-[#121d15] text-[#cfc5aa] border-[#2b4432]'
+                    }`}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Tải ảnh từ máy</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMomentMethod('url')}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border ${
+                      momentMethod === 'url'
+                        ? 'bg-[#cbbaa1] text-[#1a160f] border-[#cbbaa1]'
+                        : 'bg-[#121d15] text-[#cfc5aa] border-[#2b4432]'
+                    }`}
+                  >
+                    <LinkIcon className="w-3.5 h-3.5" />
+                    <span>Nhập URL ảnh</span>
+                  </button>
+                </div>
+
+                {momentMethod === 'upload' ? (
+                  <div>
+                    <input
+                      ref={momentFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleMomentFileChange}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => momentFileInputRef.current?.click()}
+                      className="w-full py-2.5 px-3 rounded-lg bg-[#22392b] hover:bg-[#2c4937] border border-dashed border-[#446d4d] text-xs font-medium text-[#f5ebd7] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-[#eccb76]" />
+                      <span>Chọn ảnh từ điện thoại / máy tính</span>
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="url"
+                    value={momentUrl}
+                    onChange={(e) => setMomentUrl(e.target.value)}
+                    placeholder="https://... hoặc /assets/..."
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Phân loại / Khối lớp:
+                  </label>
+                  <select
+                    value={momentTag}
+                    onChange={(e) => setMomentTag(e.target.value)}
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  >
+                    <option value="KHỐI 10">KHỐI 10</option>
+                    <option value="KHỐI 11">KHỐI 11</option>
+                    <option value="KHỐI 12">KHỐI 12</option>
+                    <option value="NGOẠI KHÓA">NGOẠI KHÓA</option>
+                    <option value="GIỜ HỌC TỐT">GIỜ HỌC TỐT</option>
+                    <option value="KỶ NIỆM VUI">KỶ NIỆM VUI</option>
+                    <option value="custom">Tùy chỉnh khác</option>
+                  </select>
+                </div>
+                {momentTag === 'custom' ? (
+                  <div>
+                    <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                      Nhập thẻ tự chọn:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ví dụ: CLB ÂM NHẠC"
+                      value={momentCustomTag}
+                      onChange={(e) => setMomentCustomTag(e.target.value)}
+                      className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-end text-[11px] text-[#b8ad95] pb-2">
+                    Gắn thẻ để phân loại khoảnh khắc
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                  Tiêu đề khoảnh khắc *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: Giờ thực hành thí nghiệm hoá học vui nhộn"
+                  value={momentTitle}
+                  onChange={(e) => setMomentTitle(e.target.value)}
+                  className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                  Nội dung kỷ niệm / Lời tựa *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Chia sẻ đôi dòng cảm xúc về khoảnh khắc này..."
+                  value={momentDesc}
+                  onChange={(e) => setMomentDesc(e.target.value)}
+                  className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d] resize-none"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-3 border-t border-[#2a4332]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddingMoment(false);
+                    setEditingMoment(null);
+                  }}
+                  className="px-4 py-2 text-xs font-medium text-[#c0b59b] hover:text-white rounded-lg cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{editingMoment ? 'Cập nhật khoảnh khắc' : 'Đăng khoảnh khắc'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

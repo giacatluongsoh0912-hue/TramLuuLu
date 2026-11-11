@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { Flame, Send, Sparkles, Award } from 'lucide-react';
+import { Flame, Send, Sparkles, Award, Edit2, X, Check } from 'lucide-react';
 import { DepartmentFaculty } from '../data/memoriesData';
 
 interface TeacherTributesProps {
   departments: DepartmentFaculty[];
   onSelectDepartmentForLetter: (deptName: string) => void;
+  onUpdateDepartment?: (dept: DepartmentFaculty) => void;
 }
 
 export const TeacherTributes: React.FC<TeacherTributesProps> = ({
   departments,
   onSelectDepartmentForLetter,
+  onUpdateDepartment,
 }) => {
   const [candles, setCandles] = useState<Record<string, number>>(() => {
     const map: Record<string, number> = {};
@@ -20,6 +22,43 @@ export const TeacherTributes: React.FC<TeacherTributesProps> = ({
   });
 
   const [recentlyLit, setRecentlyLit] = useState<string | null>(null);
+
+  // Edit Department State
+  const [editingDept, setEditingDept] = useState<DepartmentFaculty | null>(null);
+  const [editTeacherCount, setEditTeacherCount] = useState<number>(10);
+  const [editName, setEditName] = useState<string>('');
+  const [editCode, setEditCode] = useState<string>('');
+  const [editTagline, setEditTagline] = useState<string>('');
+  const [editQuote, setEditQuote] = useState<string>('');
+  const [editHeadTeacher, setEditHeadTeacher] = useState<string>('');
+
+  const handleOpenEditDept = (dept: DepartmentFaculty) => {
+    setEditingDept(dept);
+    setEditTeacherCount(dept.teacherCount);
+    setEditName(dept.name);
+    setEditCode(dept.code);
+    setEditTagline(dept.tagline);
+    setEditQuote(dept.featuredQuote);
+    setEditHeadTeacher(dept.headTeacher);
+  };
+
+  const handleSaveDept = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDept || !onUpdateDepartment) return;
+
+    const updated: DepartmentFaculty = {
+      ...editingDept,
+      teacherCount: Number(editTeacherCount) || 1,
+      name: editName.trim() || editingDept.name,
+      code: editCode.trim() || editingDept.code,
+      tagline: editTagline.trim() || editingDept.tagline,
+      featuredQuote: editQuote.trim() || editingDept.featuredQuote,
+      headTeacher: editHeadTeacher.trim() || editingDept.headTeacher,
+    };
+
+    onUpdateDepartment(updated);
+    setEditingDept(null);
+  };
 
   const handleLightCandle = (deptId: string, deptName: string, initialCandles: number) => {
     setCandles((prev) => ({
@@ -76,18 +115,30 @@ export const TeacherTributes: React.FC<TeacherTributesProps> = ({
             return (
               <div
                 key={dept.id}
-                className="bg-[#18271e] border border-[#2a4332] rounded-xl p-5 flex flex-col justify-between hover:border-[#426b4f] transition-all duration-300 shadow-lg group hover:-translate-y-1"
+                className="bg-[#18271e] border border-[#2a4332] rounded-xl p-5 flex flex-col justify-between hover:border-[#426b4f] transition-all duration-300 shadow-lg group hover:-translate-y-1 relative"
               >
                 <div>
-                  {/* Department Badge and Code */}
+                  {/* Department Badge, Teacher Count and Quick Edit */}
                   <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#243a2b]">
                     <span className="text-[11px] font-mono uppercase tracking-wider text-[#eccb76] font-semibold">
                       {dept.code}
                     </span>
-                    <span className="text-[11px] text-[#8fa293] font-body flex items-center gap-1">
-                      <Award className="w-3 h-3 text-[#eccb76]" />
-                      {dept.teacherCount} Thầy Cô
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-[#cfc5aa] font-body flex items-center gap-1 font-medium bg-[#121f16] px-2 py-0.5 rounded-md border border-[#2b4432]">
+                        <Award className="w-3 h-3 text-[#eccb76]" />
+                        {dept.teacherCount} Thầy Cô
+                      </span>
+                      {onUpdateDepartment && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditDept(dept)}
+                          title={`Chỉnh sửa số thầy cô hoặc thông tin của ${dept.name}`}
+                          className="p-1 rounded-md bg-[#132017] hover:bg-[#eccb76] text-[#b8ab95] hover:text-[#1a160f] transition-colors cursor-pointer border border-[#2e4c36]"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Title & Tagline */}
@@ -136,6 +187,130 @@ export const TeacherTributes: React.FC<TeacherTributesProps> = ({
           })}
         </div>
       </div>
+
+      {/* Edit Department Modal */}
+      {editingDept && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-[#1b2b20] border-2 border-[#e4c77d]/60 rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-6 text-[#f6eedc]">
+            <button
+              onClick={() => setEditingDept(null)}
+              className="absolute top-4 right-4 text-[#cfc5aa] hover:text-white p-1 rounded-lg cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[#2d4734]">
+              <div className="w-8 h-8 rounded-full bg-[#eccb76] text-[#1c1810] flex items-center justify-center font-bold">
+                <Edit2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-serif-vintage text-lg font-bold text-white">
+                  Chỉnh Sửa Tổ Chuyên Môn
+                </h3>
+                <span className="text-xs text-[#b8ad95]">
+                  Cập nhật số lượng thầy cô và thông tin hiển thị
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveDept} className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Tên tổ chuyên môn *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Số thầy cô *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="300"
+                    required
+                    value={editTeacherCount}
+                    onChange={(e) => setEditTeacherCount(parseInt(e.target.value) || 1)}
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d] font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                  Ký hiệu / Viết tắt (Code):
+                </label>
+                <input
+                  type="text"
+                  value={editCode}
+                  onChange={(e) => setEditCode(e.target.value)}
+                  className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d] font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                  Lời giới thiệu / Tôn chỉ:
+                </label>
+                <input
+                  type="text"
+                  value={editTagline}
+                  onChange={(e) => setEditTagline(e.target.value)}
+                  className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                  Câu nói tâm đắc / Châm ngôn tổ:
+                </label>
+                <textarea
+                  rows={2}
+                  value={editQuote}
+                  onChange={(e) => setEditQuote(e.target.value)}
+                  className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d] resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                  Đại diện ký tên:
+                </label>
+                <input
+                  type="text"
+                  value={editHeadTeacher}
+                  onChange={(e) => setEditHeadTeacher(e.target.value)}
+                  className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-3 border-t border-[#2a4332]">
+                <button
+                  type="button"
+                  onClick={() => setEditingDept(null)}
+                  className="px-4 py-2 text-xs font-medium text-[#c0b59b] hover:text-white rounded-lg cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Lưu thay đổi</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

@@ -17,6 +17,9 @@ import {
   Clock,
   Compass,
   ChevronRight,
+  Trash2,
+  Edit2,
+  AlertTriangle,
 } from 'lucide-react';
 import { TeacherProfile, LEADERSHIP_TIMELINE_DATA, LeadershipMilestone } from '../data/memoriesData';
 import { compressImage } from '../utils/imageStorage';
@@ -25,6 +28,7 @@ interface TeacherGalleryProps {
   teachers: TeacherProfile[];
   onAddTeacher: (teacher: TeacherProfile) => void;
   onUpdateTeacher: (teacher: TeacherProfile) => void;
+  onDeleteTeacher?: (id: string) => void;
   onSendTributeToTeacher: (teacherName: string, department: string) => void;
 }
 
@@ -32,6 +36,7 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   teachers,
   onAddTeacher,
   onUpdateTeacher,
+  onDeleteTeacher,
   onSendTributeToTeacher,
 }) => {
   const [activeTab, setActiveTab] = useState<'timeline' | 'faculty'>('timeline');
@@ -40,6 +45,7 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   const [likesState, setLikesState] = useState<Record<string, number>>({});
   const [editingTeacher, setEditingTeacher] = useState<TeacherProfile | null>(null);
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
+  const [deletingTeacherId, setDeletingTeacherId] = useState<string | null>(null);
 
   // Edit teacher state
   const [editAvatar, setEditAvatar] = useState('');
@@ -47,6 +53,10 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   const [editUrl, setEditUrl] = useState('');
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('');
+  const [editDept, setEditDept] = useState('toan-tin');
+  const [editCustomDept, setEditCustomDept] = useState('');
+  const [editYearsOfService, setEditYearsOfService] = useState('');
+  const [editAchievements, setEditAchievements] = useState('');
   const [editQuote, setEditQuote] = useState('');
   const [editBio, setEditBio] = useState('');
   const editFileInputRef = useRef<HTMLInputElement>(null);
@@ -55,6 +65,9 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('Giáo viên Bộ môn');
   const [newDept, setNewDept] = useState('toan-tin');
+  const [newCustomDept, setNewCustomDept] = useState('');
+  const [newYearsOfService, setNewYearsOfService] = useState('Nhiều năm cống hiến');
+  const [newAchievements, setNewAchievements] = useState('Giáo viên tận tâm, Tri ân 20/11');
   const [newQuote, setNewQuote] = useState('');
   const [newBio, setNewBio] = useState('');
   const [newAvatar, setNewAvatar] = useState('/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png');
@@ -67,13 +80,14 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
     { id: 'bgh', label: 'Ban Giám Hiệu' },
     { id: 'toan-tin', label: 'Tổ Toán - Tin học' },
     { id: 'ngu-van', label: 'Tổ Ngữ Văn' },
-    { id: 'vat-ly', label: 'Tổ Vật lý' },
+    { id: 'vat-ly', label: 'Tổ Vật lý - Thiết bị' },
     { id: 'hoa-hoc', label: 'Tổ Hoá - Thiết bị' },
     { id: 'sinh-hoc', label: 'Tổ Sinh - Công nghệ' },
     { id: 'ngoai-ngu', label: 'Tổ Âm nhạc - Ngoại ngữ' },
-    { id: 'su-dia', label: 'Tổ Lịch sử địa lí' },
+    { id: 'su-dia', label: 'Tổ Lịch Sử - Địa Lý' },
     { id: 'gdtc-gdqpan', label: 'Tổ GDTC - GDQPAN' },
     { id: 'van-phong', label: 'Văn phòng - GDKT và PL' },
+    { id: 'custom', label: 'Tổ Chuyên Môn Khác' },
   ];
 
   const filteredTeachers = teachers.filter((t) => {
@@ -127,9 +141,21 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
     setEditAvatar(t.avatar);
     setEditName(t.name);
     setEditRole(t.role);
+    // If t.department is one of standard ids, use it; otherwise 'custom'
+    const matchDept = departments.some((d) => d.id === t.department && d.id !== 'all' && d.id !== 'custom');
+    if (matchDept) {
+      setEditDept(t.department);
+      setEditCustomDept('');
+    } else {
+      setEditDept('custom');
+      setEditCustomDept(t.departmentName);
+    }
+    setEditYearsOfService(t.yearsOfService || 'Nhiều năm cống hiến');
+    setEditAchievements(Array.isArray(t.achievements) ? t.achievements.join(', ') : '');
     setEditQuote(t.quote);
     setEditBio(t.bio);
     setEditUrl(t.avatar.startsWith('data:') ? '' : t.avatar);
+    setDeletingTeacherId(null);
   };
 
   const handleSaveEdit = (e: React.FormEvent) => {
@@ -137,11 +163,24 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
     if (!editingTeacher) return;
 
     const finalAvatar = editMethod === 'url' && editUrl.trim() ? editUrl.trim() : editAvatar;
+    const deptObj = departments.find((d) => d.id === editDept);
+    const finalDeptName =
+      editDept === 'custom' && editCustomDept.trim()
+        ? editCustomDept.trim()
+        : deptObj
+        ? deptObj.label
+        : editingTeacher.departmentName;
 
     const updated: TeacherProfile = {
       ...editingTeacher,
       name: editName.trim() || editingTeacher.name,
       role: editRole.trim() || editingTeacher.role,
+      department: editDept === 'custom' ? 'custom' : editDept,
+      departmentName: finalDeptName,
+      yearsOfService: editYearsOfService.trim() || editingTeacher.yearsOfService,
+      achievements: editAchievements.trim()
+        ? editAchievements.split(',').map((s) => s.trim()).filter(Boolean)
+        : editingTeacher.achievements,
       quote: editQuote.trim() || editingTeacher.quote,
       bio: editBio.trim() || editingTeacher.bio,
       avatar: finalAvatar || editingTeacher.avatar,
@@ -156,27 +195,38 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
     if (!newName.trim() || !newQuote.trim()) return;
 
     const finalAvatar = addMethod === 'url' && addUrl.trim() ? addUrl.trim() : newAvatar;
-
     const deptObj = departments.find((d) => d.id === newDept);
+    const finalDeptName =
+      newDept === 'custom' && newCustomDept.trim()
+        ? newCustomDept.trim()
+        : deptObj
+        ? deptObj.label
+        : 'Tổ Chuyên Môn';
 
     const newT: TeacherProfile = {
       id: 'tch-' + Date.now(),
       name: newName.trim(),
       role: newRole.trim(),
-      department: newDept,
-      departmentName: deptObj ? deptObj.label : 'Tổ Chuyên Môn',
+      department: newDept === 'custom' ? 'custom' : newDept,
+      departmentName: finalDeptName,
       avatar: finalAvatar,
       quote: newQuote.trim(),
-      achievements: ['Giáo viên tận tâm', 'Tri ân 20/11'],
+      achievements: newAchievements.trim()
+        ? newAchievements.split(',').map((s) => s.trim()).filter(Boolean)
+        : ['Giáo viên tận tâm', 'Tri ân 20/11'],
       bio: newBio.trim() || 'Thầy cô luôn là tấm gương sáng dìu dắt bao thế hệ học sinh Chuyên Sơn La khôn lớn và trưởng thành.',
-      yearsOfService: 'Nhiều năm cống hiến',
+      yearsOfService: newYearsOfService.trim() || 'Nhiều năm cống hiến',
       likes: 1,
     };
 
     onAddTeacher(newT);
     setNewName('');
+    setNewRole('Giáo viên Bộ môn');
     setNewQuote('');
     setNewBio('');
+    setNewCustomDept('');
+    setNewAchievements('Giáo viên tận tâm, Tri ân 20/11');
+    setNewYearsOfService('Nhiều năm cống hiến');
     setAddUrl('');
     setNewAvatar('/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png');
     setIsAddingTeacher(false);
@@ -383,14 +433,57 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
                         {tch.departmentName}
                       </div>
 
-                      {/* Quick Edit Photo Button */}
-                      <button
-                        onClick={() => handleOpenEdit(tch)}
-                        title="Thay đổi ảnh hoặc thông tin thầy cô"
-                        className="absolute top-3 right-3 p-1.5 rounded-full bg-black/60 hover:bg-[#eccb76] text-white hover:text-[#1a160f] transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-md"
-                      >
-                        <Camera className="w-3.5 h-3.5" />
-                      </button>
+                      {/* Quick Edit and Delete Action Buttons */}
+                      <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity z-10">
+                        <button
+                          onClick={() => handleOpenEdit(tch)}
+                          title="Chỉnh sửa thông tin thầy cô"
+                          className="p-1.5 rounded-full bg-black/60 hover:bg-[#eccb76] text-white hover:text-[#1a160f] transition-all cursor-pointer shadow-md"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        {onDeleteTeacher && (
+                          <button
+                            onClick={() => setDeletingTeacherId(tch.id)}
+                            title="Xóa thầy cô này (nếu không có trong trường)"
+                            className="p-1.5 rounded-full bg-black/60 hover:bg-rose-600 text-white transition-all cursor-pointer shadow-md"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Delete Confirmation Overlay */}
+                      {deletingTeacherId === tch.id && (
+                        <div className="absolute inset-0 bg-[#0d1610]/95 backdrop-blur-xs z-20 p-4 flex flex-col items-center justify-center text-center animate-fade-in border-2 border-rose-500/60">
+                          <AlertTriangle className="w-7 h-7 text-rose-400 mb-1.5" />
+                          <h4 className="font-serif-vintage text-xs font-bold text-white mb-1">
+                            Xác nhận xóa thầy/cô?
+                          </h4>
+                          <p className="text-[11px] text-[#cfc5aa] mb-3 leading-tight line-clamp-2">
+                            Bạn có chắc muốn xóa <span className="font-bold text-rose-300">{tch.name}</span> khỏi danh sách không?
+                          </p>
+                          <div className="flex items-center gap-2 w-full">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onDeleteTeacher) onDeleteTeacher(tch.id);
+                                setDeletingTeacherId(null);
+                              }}
+                              className="flex-1 py-1.5 px-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold cursor-pointer transition-colors shadow-sm"
+                            >
+                              Xóa ngay
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingTeacherId(null)}
+                              className="flex-1 py-1.5 px-2 rounded-lg bg-[#253f2e] hover:bg-[#32523d] text-[#cfc5aa] text-[11px] font-medium cursor-pointer transition-colors"
+                            >
+                              Hủy
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Body Content */}
@@ -586,6 +679,62 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                  Thuộc Tổ chuyên môn:
+                </label>
+                <select
+                  value={editDept}
+                  onChange={(e) => setEditDept(e.target.value)}
+                  className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                >
+                  {departments
+                    .filter((d) => d.id !== 'all')
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.label}
+                      </option>
+                    ))}
+                </select>
+                {editDept === 'custom' && (
+                  <input
+                    type="text"
+                    required
+                    placeholder="Nhập tên tổ chuyên môn tùy chỉnh..."
+                    value={editCustomDept}
+                    onChange={(e) => setEditCustomDept(e.target.value)}
+                    className="w-full mt-2 bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Thâm niên cống hiến:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: 18 năm cống hiến"
+                    value={editYearsOfService}
+                    onChange={(e) => setEditYearsOfService(e.target.value)}
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Thành tích (phân cách bằng dấu phẩy):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: Giáo viên dạy giỏi, Bồi dưỡng HSG"
+                    value={editAchievements}
+                    onChange={(e) => setEditAchievements(e.target.value)}
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
                   Câu nói ghi dấu ấn / Châm ngôn:
                 </label>
                 <input
@@ -689,13 +838,51 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
                   onChange={(e) => setNewDept(e.target.value)}
                   className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
                 >
-                  <option value="bgh">Ban Giám Hiệu</option>
-                  <option value="toan-tin">Tổ Toán - Tin học</option>
-                  <option value="ngu-van">Tổ Ngữ Văn</option>
-                  <option value="ngoai-ngu">Tổ Ngoại Ngữ</option>
-                  <option value="vat-ly">Tổ Vật Lý</option>
-                  <option value="su-dia">Tổ Lịch Sử - Địa Lý - GDCD</option>
+                  {departments
+                    .filter((d) => d.id !== 'all')
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.label}
+                      </option>
+                    ))}
                 </select>
+                {newDept === 'custom' && (
+                  <input
+                    type="text"
+                    required
+                    placeholder="Nhập tên tổ chuyên môn tùy chỉnh..."
+                    value={newCustomDept}
+                    onChange={(e) => setNewCustomDept(e.target.value)}
+                    className="w-full mt-2 bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Thâm niên cống hiến:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: 15 năm cống hiến"
+                    value={newYearsOfService}
+                    onChange={(e) => setNewYearsOfService(e.target.value)}
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Thành tích nổi bật:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: Giáo viên dạy giỏi cấp Tỉnh"
+                    value={newAchievements}
+                    onChange={(e) => setNewAchievements(e.target.value)}
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                </div>
               </div>
 
               {/* Photo Input */}

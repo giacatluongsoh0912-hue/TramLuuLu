@@ -26,6 +26,7 @@ import {
   INITIAL_PADLET_NOTES,
   MemoryPhoto,
   TeacherProfile,
+  DepartmentFaculty,
 } from './data/memoriesData';
 import { TributeMessage, PadletNote } from './utils/tributeRules';
 
@@ -66,6 +67,15 @@ export default function App() {
     }
   });
 
+  const [departments, setDepartments] = useState<DepartmentFaculty[]>(() => {
+    try {
+      const saved = localStorage.getItem('csl_departments');
+      return saved ? JSON.parse(saved) : INITIAL_DEPARTMENTS;
+    } catch {
+      return INITIAL_DEPARTMENTS;
+    }
+  });
+
   const [petalsEnabled, setPetalsEnabled] = useState(true);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [isCardMakerOpen, setIsCardMakerOpen] = useState(false);
@@ -88,7 +98,7 @@ export default function App() {
     }
   }, []);
 
-  // Hydrate from IndexedDB on startup (preserves custom user photos even if localStorage quota was hit)
+  // Hydrate from IndexedDB on startup (preserves custom user photos and edits)
   useEffect(() => {
     (async () => {
       try {
@@ -107,6 +117,10 @@ export default function App() {
         const idbNotes = await idbGet<PadletNote[]>('csl_padlet_notes');
         if (idbNotes && Array.isArray(idbNotes) && idbNotes.length > 0) {
           setPadletNotes(idbNotes);
+        }
+        const idbDepts = await idbGet<DepartmentFaculty[]>('csl_departments');
+        if (idbDepts && Array.isArray(idbDepts) && idbDepts.length > 0) {
+          setDepartments(idbDepts);
         }
       } catch (err) {
         console.warn('IndexedDB initial hydration skipped:', err);
@@ -154,6 +168,16 @@ export default function App() {
     idbSet('csl_padlet_notes', padletNotes);
   }, [padletNotes]);
 
+  // Persist departments to both localStorage and IndexedDB
+  useEffect(() => {
+    try {
+      localStorage.setItem('csl_departments', JSON.stringify(departments));
+    } catch {
+      // quota fallback to IDB
+    }
+    idbSet('csl_departments', departments);
+  }, [departments]);
+
   const handleAddMemory = (newMem: MemoryPhoto) => {
     setMemories((prev) => [newMem, ...prev]);
   };
@@ -168,6 +192,14 @@ export default function App() {
 
   const handleUpdateTeacher = (updatedTch: TeacherProfile) => {
     setTeachers((prev) => prev.map((t) => (t.id === updatedTch.id ? updatedTch : t)));
+  };
+
+  const handleDeleteTeacher = (id: string) => {
+    setTeachers((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const handleUpdateDepartment = (updatedDept: DepartmentFaculty) => {
+    setDepartments((prev) => prev.map((d) => (d.id === updatedDept.id ? updatedDept : d)));
   };
 
   const handleAddPadletNote = (newNote: PadletNote) => {
@@ -277,13 +309,15 @@ export default function App() {
           teachers={teachers}
           onAddTeacher={handleAddTeacher}
           onUpdateTeacher={handleUpdateTeacher}
+          onDeleteTeacher={handleDeleteTeacher}
           onSendTributeToTeacher={handleSendDirectTribute}
         />
 
         {/* Section 3: Interactive Department Candle Lighting */}
         <TeacherTributes
-          departments={INITIAL_DEPARTMENTS}
+          departments={departments}
           onSelectDepartmentForLetter={handleOpenComposerWithRecipient}
+          onUpdateDepartment={handleUpdateDepartment}
         />
 
         {/* Section 4: Interactive Padlet Wall ("Bảng Tương Tác Padlet & Kỷ Niệm 20/11") */}
@@ -296,7 +330,7 @@ export default function App() {
 
         {/* Section 5: Cinematic Film Reel & Letter Writing Desk ("Cuộn Phim Tri Ân & Thư Bay Gửi Thầy Cô") */}
         <CinematicLetterDesk
-          departments={INITIAL_DEPARTMENTS}
+          departments={departments}
           onAddTribute={handleAddTribute}
           onScrollToGuestbook={() => {
             const el = document.getElementById('guestbook');
