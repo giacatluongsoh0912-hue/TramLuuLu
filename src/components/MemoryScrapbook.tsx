@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Heart, Sparkles, Plus, Image as ImageIcon, X, Camera, Upload, Link, Check, Edit2 } from 'lucide-react';
+import { Heart, Sparkles, Plus, Image as ImageIcon, X, Camera, Upload, Link, Check, Edit2, Trash2 } from 'lucide-react';
 import { MemoryPhoto } from '../data/memoriesData';
 import { compressImage } from '../utils/imageStorage';
 
@@ -7,6 +7,7 @@ interface MemoryScrapbookProps {
   memories: MemoryPhoto[];
   onAddMemory: (newMemory: MemoryPhoto) => void;
   onUpdateMemory: (updatedMemory: MemoryPhoto) => void;
+  onDeleteMemory?: (id: string) => void;
   onSelectMemory: (memory: MemoryPhoto) => void;
 }
 
@@ -14,19 +15,21 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
   memories,
   onAddMemory,
   onUpdateMemory,
+  onDeleteMemory,
   onSelectMemory,
 }) => {
   const [filter, setFilter] = useState<'all' | 'classroom' | 'flower' | 'olympiad' | 'graduation'>('all');
   const [likesState, setLikesState] = useState<Record<string, number>>({});
   const [isAdding, setIsAdding] = useState(false);
   const [editingMemory, setEditingMemory] = useState<MemoryPhoto | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // New memory form state
   const [title, setTitle] = useState('');
   const [year, setYear] = useState('Khóa K31 (2022-2025)');
   const [caption, setCaption] = useState('');
   const [author, setAuthor] = useState('');
-  const [newImageSrc, setNewImageSrc] = useState('/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png');
+  const [newImageSrc, setNewImageSrc] = useState('https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=800&q=80');
   const [addMethod, setAddMethod] = useState<'upload' | 'url'>('upload');
   const [customUrl, setCustomUrl] = useState('');
 
@@ -47,10 +50,13 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
   });
 
   const handleToggleLike = (id: string, initialLikes: number) => {
-    setLikesState((prev) => {
-      const current = prev[id] !== undefined ? prev[id] : initialLikes;
-      return { ...prev, [id]: current + 1 };
-    });
+    const current = likesState[id] !== undefined ? likesState[id] : initialLikes;
+    const nextLikes = current + 1;
+    setLikesState((prev) => ({ ...prev, [id]: nextLikes }));
+    const mem = memories.find((m) => m.id === id);
+    if (mem) {
+      onUpdateMemory({ ...mem, likes: nextLikes });
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {
@@ -484,21 +490,48 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-3 border-t border-[#2a4332]">
-                <button
-                  type="button"
-                  onClick={() => setEditingMemory(null)}
-                  className="px-4 py-2 text-xs font-medium text-[#c0b59b] hover:text-white rounded-lg cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>Lưu thay đổi ảnh</span>
-                </button>
+              <div className="pt-3 flex items-center justify-between border-t border-[#2a4332]">
+                {onDeleteMemory && editingMemory && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirmDeleteId === editingMemory.id) {
+                        onDeleteMemory(editingMemory.id);
+                        setEditingMemory(null);
+                        setConfirmDeleteId(null);
+                      } else {
+                        setConfirmDeleteId(editingMemory.id);
+                      }
+                    }}
+                    className={`px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      confirmDeleteId === editingMemory.id
+                        ? 'bg-red-600 text-white animate-pulse'
+                        : 'text-red-400 hover:text-red-300 hover:bg-red-900/30'
+                    }`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{confirmDeleteId === editingMemory.id ? 'Xác nhận xóa kỷ niệm?' : 'Xóa kỷ niệm'}</span>
+                  </button>
+                )}
+                <div className="flex items-center gap-2 ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingMemory(null);
+                      setConfirmDeleteId(null);
+                    }}
+                    className="px-4 py-2 text-xs font-medium text-[#c0b59b] hover:text-white rounded-lg cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Lưu thay đổi ảnh</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>

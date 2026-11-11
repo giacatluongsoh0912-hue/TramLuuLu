@@ -1,0 +1,154 @@
+{
+  "entities": {
+    "Memory": {
+      "title": "Memory",
+      "description": "A commemorative photo memory in the scrapbook",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 300 },
+        "year": { "type": "string", "maxLength": 100 },
+        "category": { "type": "string", "enum": ["classroom", "flower", "olympiad", "graduation"] },
+        "caption": { "type": "string", "maxLength": 3000 },
+        "author": { "type": "string", "maxLength": 200 },
+        "imageSrc": { "type": "string", "maxLength": 500000 },
+        "tags": { "type": "array" },
+        "likes": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["title", "category", "imageSrc"]
+    },
+    "Teacher": {
+      "title": "Teacher",
+      "description": "Faculty profile of a teacher at THPT Chuyen Son La",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 200 },
+        "role": { "type": "string", "maxLength": 300 },
+        "department": { "type": "string", "maxLength": 100 },
+        "departmentName": { "type": "string", "maxLength": 200 },
+        "avatar": { "type": "string", "maxLength": 500000 },
+        "quote": { "type": "string", "maxLength": 2000 },
+        "achievements": { "type": "array" },
+        "bio": { "type": "string", "maxLength": 5000 },
+        "yearsOfService": { "type": "string", "maxLength": 100 },
+        "likes": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["name", "department", "departmentName"]
+    },
+    "Department": {
+      "title": "Department",
+      "description": "Academic department or subject group",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 200 },
+        "code": { "type": "string", "maxLength": 100 },
+        "tagline": { "type": "string", "maxLength": 1000 },
+        "teacherCount": { "type": "number" },
+        "featuredQuote": { "type": "string", "maxLength": 2000 },
+        "headTeacher": { "type": "string", "maxLength": 300 },
+        "candleCount": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["name", "teacherCount"]
+    },
+    "ContestMoment": {
+      "title": "ContestMoment",
+      "description": "A shared moment for Part 2 Thay Tro Chuyen Son La",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 300 },
+        "cohort": { "type": "string", "maxLength": 150 },
+        "caption": { "type": "string", "maxLength": 3000 },
+        "imageSrc": { "type": "string", "maxLength": 500000 },
+        "likes": { "type": "number" },
+        "author": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["title", "imageSrc"]
+    },
+    "Tribute": {
+      "title": "Tribute",
+      "description": "Gratitude letter or tribute note for teachers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderName": { "type": "string", "maxLength": 200 },
+        "affiliation": { "type": "string", "maxLength": 300 },
+        "recipient": { "type": "string", "maxLength": 300 },
+        "department": { "type": "string", "maxLength": 200 },
+        "content": { "type": "string", "maxLength": 6000 },
+        "paperTheme": { "type": "string", "maxLength": 100 },
+        "gift": { "type": "string", "maxLength": 100 },
+        "likes": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["senderName", "content", "recipient"]
+    },
+    "PadletNote": {
+      "title": "PadletNote",
+      "description": "Sticky memory note on the Padlet board",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "author": { "type": "string", "maxLength": 200 },
+        "className": { "type": "string", "maxLength": 200 },
+        "content": { "type": "string", "maxLength": 2000 },
+        "color": { "type": "string", "enum": ["yellow", "pink", "cyan", "purple", "orange"] },
+        "tag": { "type": "string", "maxLength": 100 },
+        "likes": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["author", "content", "color"]
+    },
+    "FlowerScore": {
+      "title": "FlowerScore",
+      "description": "Competition scores and flower counts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "flower9": { "type": "number" },
+        "flower10": { "type": "number" },
+        "participationRate": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["flower9", "flower10"]
+    }
+  },
+  "firestore": {
+    "/memories/{memoryId}": {
+      "schema": "Memory",
+      "description": "Public scrapbook memories viewable and editable by students and alumni"
+    },
+    "/teachers/{teacherId}": {
+      "schema": "Teacher",
+      "description": "Faculty profiles with accomplishments and photos"
+    },
+    "/departments/{departmentId}": {
+      "schema": "Department",
+      "description": "Faculty departments with teacher counts and candle counts"
+    },
+    "/contest_moments/{momentId}": {
+      "schema": "ContestMoment",
+      "description": "Teacher and student moments for the 20/11 contest"
+    },
+    "/tributes/{tributeId}": {
+      "schema": "Tribute",
+      "description": "Gratitude letters sent to teachers and departments"
+    },
+    "/padlet_notes/{noteId}": {
+      "schema": "PadletNote",
+      "description": "Padlet sticky notes"
+    },
+    "/competition_stats/{statId}": {
+      "schema": "FlowerScore",
+      "description": "Live 20/11 emulation flower scores"
+    }
+  }
+}

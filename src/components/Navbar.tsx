@@ -37,7 +37,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           />
           <div className="flex flex-col">
             <span className="font-serif-vintage text-base sm:text-lg leading-tight">THPT Chuyên Sơn La</span>
-            <span className="text-[10px] text-[#eccb76] font-mono tracking-wider uppercase">Trạm Kết Nối Số · 20/11</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-[#eccb76] font-mono tracking-wider uppercase">Trạm Kết Nối Số · 20/11</span>
+              <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-emerald-950/60 border border-emerald-600/40 text-[9px] text-emerald-300 font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Live Sync</span>
+              </span>
+            </div>
           </div>
         </a>
 

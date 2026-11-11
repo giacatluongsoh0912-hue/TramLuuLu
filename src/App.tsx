@@ -29,6 +29,22 @@ import {
   DepartmentFaculty,
 } from './data/memoriesData';
 import { TributeMessage, PadletNote } from './utils/tributeRules';
+import {
+  subscribeMemories,
+  syncSaveMemory,
+  syncDeleteMemory,
+  subscribeTeachers,
+  syncSaveTeacher,
+  syncDeleteTeacher,
+  subscribeDepartments,
+  syncSaveDepartment,
+  subscribePadletNotes,
+  syncSavePadletNote,
+  syncDeletePadletNote,
+  subscribeTributes,
+  syncSaveTribute,
+  syncDeleteTribute,
+} from './utils/syncService';
 
 export default function App() {
   const [memories, setMemories] = useState<MemoryPhoto[]>(() => {
@@ -98,132 +114,96 @@ export default function App() {
     }
   }, []);
 
-  // Hydrate from IndexedDB on startup (preserves custom user photos and edits)
+  // Real-time synchronization across all devices and browsers via Cloud Firestore
   useEffect(() => {
-    (async () => {
-      try {
-        const idbMemories = await idbGet<MemoryPhoto[]>('csl_memories');
-        if (idbMemories && Array.isArray(idbMemories) && idbMemories.length > 0) {
-          setMemories(idbMemories);
-        }
-        const idbTeachers = await idbGet<TeacherProfile[]>('csl_teachers');
-        if (idbTeachers && Array.isArray(idbTeachers) && idbTeachers.length > 0) {
-          setTeachers(idbTeachers);
-        }
-        const idbTributes = await idbGet<TributeMessage[]>('csl_tributes');
-        if (idbTributes && Array.isArray(idbTributes) && idbTributes.length > 0) {
-          setTributes(idbTributes);
-        }
-        const idbNotes = await idbGet<PadletNote[]>('csl_padlet_notes');
-        if (idbNotes && Array.isArray(idbNotes) && idbNotes.length > 0) {
-          setPadletNotes(idbNotes);
-        }
-        const idbDepts = await idbGet<DepartmentFaculty[]>('csl_departments');
-        if (idbDepts && Array.isArray(idbDepts) && idbDepts.length > 0) {
-          setDepartments(idbDepts);
-        }
-      } catch (err) {
-        console.warn('IndexedDB initial hydration skipped:', err);
-      }
-    })();
+    const unsubMemories = subscribeMemories((data) => {
+      if (data && data.length > 0) setMemories(data);
+    });
+    const unsubTeachers = subscribeTeachers((data) => {
+      if (data && data.length > 0) setTeachers(data);
+    });
+    const unsubDepts = subscribeDepartments((data) => {
+      if (data && data.length > 0) setDepartments(data);
+    });
+    const unsubNotes = subscribePadletNotes((data) => {
+      if (data && data.length > 0) setPadletNotes(data);
+    });
+    const unsubTributes = subscribeTributes((data) => {
+      if (data && data.length > 0) setTributes(data);
+    });
+
+    return () => {
+      unsubMemories();
+      unsubTeachers();
+      unsubDepts();
+      unsubNotes();
+      unsubTributes();
+    };
   }, []);
-
-  // Persist memories to both localStorage and IndexedDB
-  useEffect(() => {
-    try {
-      localStorage.setItem('csl_memories', JSON.stringify(memories));
-    } catch {
-      // quota fallback to IDB
-    }
-    idbSet('csl_memories', memories);
-  }, [memories]);
-
-  // Persist tributes to both localStorage and IndexedDB
-  useEffect(() => {
-    try {
-      localStorage.setItem('csl_tributes', JSON.stringify(tributes));
-    } catch {
-      // quota fallback to IDB
-    }
-    idbSet('csl_tributes', tributes);
-  }, [tributes]);
-
-  // Persist teachers to both localStorage and IndexedDB
-  useEffect(() => {
-    try {
-      localStorage.setItem('csl_teachers', JSON.stringify(teachers));
-    } catch {
-      // quota fallback to IDB
-    }
-    idbSet('csl_teachers', teachers);
-  }, [teachers]);
-
-  // Persist padlet notes to both localStorage and IndexedDB
-  useEffect(() => {
-    try {
-      localStorage.setItem('csl_padlet_notes', JSON.stringify(padletNotes));
-    } catch {
-      // quota fallback to IDB
-    }
-    idbSet('csl_padlet_notes', padletNotes);
-  }, [padletNotes]);
-
-  // Persist departments to both localStorage and IndexedDB
-  useEffect(() => {
-    try {
-      localStorage.setItem('csl_departments', JSON.stringify(departments));
-    } catch {
-      // quota fallback to IDB
-    }
-    idbSet('csl_departments', departments);
-  }, [departments]);
 
   const handleAddMemory = (newMem: MemoryPhoto) => {
     setMemories((prev) => [newMem, ...prev]);
+    syncSaveMemory(newMem).catch(console.error);
   };
 
   const handleUpdateMemory = (updatedMem: MemoryPhoto) => {
     setMemories((prev) => prev.map((m) => (m.id === updatedMem.id ? updatedMem : m)));
+    syncSaveMemory(updatedMem).catch(console.error);
+  };
+
+  const handleDeleteMemory = (id: string) => {
+    setMemories((prev) => prev.filter((m) => m.id !== id));
+    syncDeleteMemory(id).catch(console.error);
   };
 
   const handleAddTeacher = (newTch: TeacherProfile) => {
     setTeachers((prev) => [newTch, ...prev]);
+    syncSaveTeacher(newTch).catch(console.error);
   };
 
   const handleUpdateTeacher = (updatedTch: TeacherProfile) => {
     setTeachers((prev) => prev.map((t) => (t.id === updatedTch.id ? updatedTch : t)));
+    syncSaveTeacher(updatedTch).catch(console.error);
   };
 
   const handleDeleteTeacher = (id: string) => {
     setTeachers((prev) => prev.filter((t) => t.id !== id));
+    syncDeleteTeacher(id).catch(console.error);
   };
 
   const handleUpdateDepartment = (updatedDept: DepartmentFaculty) => {
     setDepartments((prev) => prev.map((d) => (d.id === updatedDept.id ? updatedDept : d)));
+    syncSaveDepartment(updatedDept).catch(console.error);
   };
 
   const handleAddPadletNote = (newNote: PadletNote) => {
     setPadletNotes((prev) => [newNote, ...prev]);
+    syncSavePadletNote(newNote).catch(console.error);
   };
 
   const handleUpdatePadletNote = (updatedNote: PadletNote) => {
     setPadletNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? updatedNote : n)));
+    syncSavePadletNote(updatedNote).catch(console.error);
   };
 
   const handleDeletePadletNote = (id: string) => {
     setPadletNotes((prev) => prev.filter((n) => n.id !== id));
+    syncDeletePadletNote(id).catch(console.error);
   };
 
   const handleAddTribute = (newTrib: TributeMessage) => {
     setTributes((prev) => [newTrib, ...prev]);
+    syncSaveTribute(newTrib).catch(console.error);
   };
 
   const handleUpdateTribute = (updatedTrib: TributeMessage) => {
     setTributes((prev) => prev.map((t) => (t.id === updatedTrib.id ? updatedTrib : t)));
+    syncSaveTribute(updatedTrib).catch(console.error);
   };
 
   const handleDeleteTribute = (id: string) => {
     setTributes((prev) => prev.filter((t) => t.id !== id));
+    syncDeleteTribute(id).catch(console.error);
   };
 
   const handleOpenComposerWithRecipient = (deptName: string) => {
@@ -301,6 +281,7 @@ export default function App() {
           memories={memories}
           onAddMemory={handleAddMemory}
           onUpdateMemory={handleUpdateMemory}
+          onDeleteMemory={handleDeleteMemory}
           onSelectMemory={(m) => setSelectedPhoto(m)}
         />
 

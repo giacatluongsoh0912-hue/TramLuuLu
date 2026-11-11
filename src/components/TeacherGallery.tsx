@@ -70,7 +70,7 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   const [newAchievements, setNewAchievements] = useState('Giáo viên tận tâm, Tri ân 20/11');
   const [newQuote, setNewQuote] = useState('');
   const [newBio, setNewBio] = useState('');
-  const [newAvatar, setNewAvatar] = useState('/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png');
+  const [newAvatar, setNewAvatar] = useState('https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=400&q=80');
   const [addMethod, setAddMethod] = useState<'upload' | 'url'>('upload');
   const [addUrl, setAddUrl] = useState('');
   const addFileInputRef = useRef<HTMLInputElement>(null);
@@ -104,10 +104,13 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   });
 
   const handleToggleLike = (id: string, initialLikes: number) => {
-    setLikesState((prev) => {
-      const current = prev[id] !== undefined ? prev[id] : initialLikes;
-      return { ...prev, [id]: current + 1 };
-    });
+    const current = likesState[id] !== undefined ? likesState[id] : initialLikes;
+    const nextLikes = current + 1;
+    setLikesState((prev) => ({ ...prev, [id]: nextLikes }));
+    const teacher = teachers.find((t) => t.id === id);
+    if (teacher) {
+      onUpdateTeacher({ ...teacher, likes: nextLikes });
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {

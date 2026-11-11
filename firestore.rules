@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Memories collection
+    match /memories/{memoryId} {
+      allow read: if isValidId(memoryId);
+      allow create, update: if isValidId(memoryId)
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 300
+        && request.resource.data.imageSrc is string
+        && request.resource.data.imageSrc.size() <= 1000000;
+      allow delete: if isValidId(memoryId);
+    }
+
+    // Teachers collection
+    match /teachers/{teacherId} {
+      allow read: if isValidId(teacherId);
+      allow create, update: if isValidId(teacherId)
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 200
+        && request.resource.data.department is string;
+      allow delete: if isValidId(teacherId);
+    }
+
+    // Departments collection
+    match /departments/{departmentId} {
+      allow read: if isValidId(departmentId);
+      allow create, update: if isValidId(departmentId)
+        && request.resource.data.name is string
+        && request.resource.data.teacherCount is number;
+      allow delete: if false;
+    }
+
+    // Contest Moments collection
+    match /contest_moments/{momentId} {
+      allow read: if isValidId(momentId);
+      allow create, update: if isValidId(momentId)
+        && request.resource.data.title is string
+        && request.resource.data.imageSrc is string
+        && request.resource.data.imageSrc.size() <= 1000000;
+      allow delete: if isValidId(momentId);
+    }
+
+    // Tributes collection (letters to teachers)
+    match /tributes/{tributeId} {
+      allow read: if isValidId(tributeId);
+      allow create, update: if isValidId(tributeId)
+        && request.resource.data.senderName is string
+        && request.resource.data.content is string
+        && request.resource.data.content.size() <= 10000;
+      allow delete: if isValidId(tributeId);
+    }
+
+    // Padlet Notes collection
+    match /padlet_notes/{noteId} {
+      allow read: if isValidId(noteId);
+      allow create, update: if isValidId(noteId)
+        && request.resource.data.author is string
+        && request.resource.data.content is string;
+      allow delete: if isValidId(noteId);
+    }
+
+    // Competition Stats collection
+    match /competition_stats/{statId} {
+      allow read: if isValidId(statId);
+      allow create, update: if isValidId(statId)
+        && request.resource.data.flower9 is number
+        && request.resource.data.flower10 is number;
+      allow delete: if false;
+    }
+  }
+}

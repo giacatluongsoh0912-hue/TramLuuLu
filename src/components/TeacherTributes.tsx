@@ -61,14 +61,22 @@ export const TeacherTributes: React.FC<TeacherTributesProps> = ({
   };
 
   const handleLightCandle = (deptId: string, deptName: string, initialCandles: number) => {
+    const nextCount = (candles[deptId] !== undefined ? candles[deptId] : initialCandles) + 1;
     setCandles((prev) => ({
       ...prev,
-      [deptId]: (prev[deptId] !== undefined ? prev[deptId] : initialCandles) + 1,
+      [deptId]: nextCount,
     }));
     setRecentlyLit(deptName);
     setTimeout(() => {
       setRecentlyLit(null);
     }, 3000);
+
+    if (onUpdateDepartment) {
+      const dept = departments.find((d) => d.id === deptId);
+      if (dept) {
+        onUpdateDepartment({ ...dept, candleCount: nextCount });
+      }
+    }
   };
 
   const totalCandles = departments.reduce(
