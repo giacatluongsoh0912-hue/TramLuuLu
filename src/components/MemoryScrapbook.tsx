@@ -1,13 +1,33 @@
 import React, { useState, useRef } from 'react';
-import { Heart, Sparkles, Plus, Image as ImageIcon, X, Camera, Upload, Link, Check, Edit2, Trash2 } from 'lucide-react';
+import {
+  Heart,
+  Sparkles,
+  Plus,
+  Image as ImageIcon,
+  X,
+  Camera,
+  Upload,
+  Link,
+  Check,
+  Edit2,
+  Trash2,
+  Loader2,
+  CloudUpload,
+} from 'lucide-react';
 import { MemoryPhoto } from '../data/memoriesData';
-import { compressImage } from '../utils/imageStorage';
+import { compressImage, formatFileSize } from '../utils/imageStorage';
+import { uploadMediaAsset } from '../utils/syncService';
+import { mergeLikeCount } from '../utils/syncHelpers';
+import { SyncedImage } from './SyncedImage';
+
+const DEFAULT_MEMORY_PHOTO = '/assets/aistudio/image_3c5728ff.png';
 
 interface MemoryScrapbookProps {
   memories: MemoryPhoto[];
-  onAddMemory: (newMemory: MemoryPhoto) => void;
-  onUpdateMemory: (updatedMemory: MemoryPhoto) => void;
-  onDeleteMemory?: (id: string) => void;
+  onAddMemory: (newMemory: MemoryPhoto) => Promise<void> | void;
+  onUpdateMemory: (updatedMemory: MemoryPhoto) => Promise<void> | void;
+  onLikeMemory?: (memory: MemoryPhoto) => Promise<void> | void;
+  onDeleteMemory?: (id: string) => Promise<void> | void;
   onSelectMemory: (memory: MemoryPhoto) => void;
 }
 
@@ -15,6 +35,7 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
   memories,
   onAddMemory,
   onUpdateMemory,
+  onLikeMemory,
   onDeleteMemory,
   onSelectMemory,
 }) => {
@@ -23,13 +44,16 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
   const [isAdding, setIsAdding] = useState(false);
   const [editingMemory, setEditingMemory] = useState<MemoryPhoto | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSizeInfo, setUploadSizeInfo] = useState<string | null>(null);
 
   // New memory form state
   const [title, setTitle] = useState('');
   const [year, setYear] = useState('Khóa K31 (2022-2025)');
   const [caption, setCaption] = useState('');
   const [author, setAuthor] = useState('');
-  const [newImageSrc, setNewImageSrc] = useState('https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=800&q=80');
+  const [newImageSrc, setNewImageSrc] = useState(DEFAULT_MEMORY_PHOTO);
   const [addMethod, setAddMethod] = useState<'upload' | 'url'>('upload');
   const [customUrl, setCustomUrl] = useState('');
 
@@ -50,94 +74,126 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
   });
 
   const handleToggleLike = (id: string, initialLikes: number) => {
-    const current = likesState[id] !== undefined ? likesState[id] : initialLikes;
+    const mem = memories.find((m) => m.id === id);
+    const current = mergeLikeCount(likesState[id], mem?.likes ?? initialLikes);
     const nextLikes = current + 1;
     setLikesState((prev) => ({ ...prev, [id]: nextLikes }));
-    const mem = memories.find((m) => m.id === id);
     if (mem) {
-      onUpdateMemory({ ...mem, likes: nextLikes });
+      if (onLikeMemory) {
+        onLikeMemory(mem);
+      } else {
+        onUpdateMemory({ ...mem, likes: nextLikes });
+      }
     }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadError(null);
 
     try {
-      const compressed = await compressImage(file, 1000, 1000, 0.82);
+      const compressed = await compressImage(file, 1600, 1600, 0.88);
+      const approxBytes = Math.round((compressed.length * 3) / 4);
+      setUploadSizeInfo(
+        `Ảnh gốc ${formatFileSize(file.size)} → Tối ưu chất lượng cao ${formatFileSize(approxBytes)}`
+      );
       if (isEditing) {
         setEditImageSrc(compressed);
       } else {
         setNewImageSrc(compressed);
       }
     } catch {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          if (isEditing) {
-            setEditImageSrc(reader.result);
-          } else {
-            setNewImageSrc(reader.result);
-          }
-        }
-      };
-      reader.readAsDataURL(file);
+      setUploadError('Không thể đọc tệp ảnh này. Vui lòng thử lại với định dạng JPG/PNG.');
     }
   };
 
   const handleOpenEdit = (mem: MemoryPhoto, e: React.MouseEvent) => {
     e.stopPropagation();
+    setUploadError(null);
+    setUploadSizeInfo(null);
     setEditingMemory(mem);
     setEditImageSrc(mem.imageSrc);
     setEditTitle(mem.title);
     setEditCaption(mem.caption);
     setEditYear(mem.year);
-    setEditUrl(mem.imageSrc.startsWith('data:') ? '' : mem.imageSrc);
+    setEditMethod('upload');
+    setEditUrl(mem.imageSrc.startsWith('data:') || mem.imageSrc.startsWith('media://') ? '' : mem.imageSrc);
   };
 
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingMemory) return;
+    if (!editingMemory || isUploading) return;
 
-    const finalImage = editMethod === 'url' && editUrl.trim() ? editUrl.trim() : editImageSrc;
+    setIsUploading(true);
+    setUploadError(null);
+    try {
+      let finalImage = editMethod === 'url' && editUrl.trim() ? editUrl.trim() : editImageSrc;
+      if (finalImage.startsWith('data:')) {
+        finalImage = await uploadMediaAsset(finalImage);
+      }
 
-    const updated: MemoryPhoto = {
-      ...editingMemory,
-      title: editTitle.trim() || editingMemory.title,
-      caption: editCaption.trim() || editingMemory.caption,
-      year: editYear.trim() || editingMemory.year,
-      imageSrc: finalImage || editingMemory.imageSrc,
-    };
+      const updated: MemoryPhoto = {
+        ...editingMemory,
+        title: editTitle.trim() || editingMemory.title,
+        caption: editCaption.trim() || editingMemory.caption,
+        year: editYear.trim() || editingMemory.year,
+        imageSrc: finalImage || editingMemory.imageSrc,
+      };
 
-    onUpdateMemory(updated);
-    setEditingMemory(null);
+      await onUpdateMemory(updated);
+      setEditingMemory(null);
+      setUploadSizeInfo(null);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : 'Không thể đồng bộ ảnh lên đám mây. Vui lòng thử lại.'
+      );
+    } finally {
+      setIsUploading(false);
+    }
   };
 
-  const handleCreateMemory = (e: React.FormEvent) => {
+  const handleCreateMemory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !caption.trim() || !author.trim()) return;
+    if (!title.trim() || !caption.trim() || !author.trim() || isUploading) return;
 
-    const finalImage = addMethod === 'url' && customUrl.trim() ? customUrl.trim() : newImageSrc;
+    setIsUploading(true);
+    setUploadError(null);
+    try {
+      let finalImage = addMethod === 'url' && customUrl.trim() ? customUrl.trim() : newImageSrc;
+      if (finalImage.startsWith('data:')) {
+        finalImage = await uploadMediaAsset(finalImage);
+      }
 
-    const newMem: MemoryPhoto = {
-      id: 'mem-' + Date.now(),
-      title: title.trim(),
-      year: year.trim(),
-      category: filter === 'all' ? 'classroom' : filter,
-      caption: caption.trim(),
-      author: author.trim(),
-      imageSrc: finalImage,
-      tags: ['Kỷ niệm mới', 'Chuyên Sơn La'],
-      likes: 1,
-    };
+      const now = Date.now();
+      const newMem: MemoryPhoto = {
+        id: 'mem-' + now,
+        title: title.trim(),
+        year: year.trim(),
+        category: filter === 'all' ? 'classroom' : filter,
+        caption: caption.trim(),
+        author: author.trim(),
+        imageSrc: finalImage,
+        tags: ['Kỷ niệm mới', 'Chuyên Sơn La'],
+        likes: 1,
+        createdAt: now,
+      };
 
-    onAddMemory(newMem);
-    setTitle('');
-    setCaption('');
-    setAuthor('');
-    setCustomUrl('');
-    setNewImageSrc('/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png');
-    setIsAdding(false);
+      await onAddMemory(newMem);
+      setTitle('');
+      setCaption('');
+      setAuthor('');
+      setCustomUrl('');
+      setNewImageSrc(DEFAULT_MEMORY_PHOTO);
+      setUploadSizeInfo(null);
+      setIsAdding(false);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : 'Không thể đồng bộ ảnh lên đám mây. Vui lòng thử lại.'
+      );
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -154,13 +210,17 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
               Lật Giở Ký Ức Chuyên Sơn La
             </h2>
             <p className="text-sm text-[#b6ab93] mt-2 max-w-2xl font-body">
-              Từng tấm ảnh polaroid, từng mẩu giấy ố vàng ghi lại những năm tháng thanh xuân rực rỡ nhất dưới chân núi sam si cùng thầy cô và bè bạn.
+              Từng tấm ảnh polaroid, từng mẩu giấy ố vàng ghi lại những năm tháng thanh xuân rực rỡ nhất dưới chân núi Sam Si cùng thầy cô và bè bạn.
             </p>
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
             <button
-              onClick={() => setIsAdding(true)}
+              onClick={() => {
+                setUploadError(null);
+                setUploadSizeInfo(null);
+                setIsAdding(true);
+              }}
               className="px-4 py-2.5 rounded-lg bg-[#27402f] hover:bg-[#32523d] text-[#f2edd9] text-xs font-semibold border border-[#3e664b] transition-all flex items-center gap-2 cursor-pointer shadow-sm"
             >
               <Plus className="w-4 h-4 text-[#eccb76]" />
@@ -169,7 +229,7 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
           </div>
         </div>
 
-        {/* Interactive Filter Tabs - Clean Segmented Buttons */}
+        {/* Interactive Filter Tabs */}
         <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-8 text-xs font-medium no-scrollbar">
           <button
             onClick={() => setFilter('all')}
@@ -219,7 +279,7 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
                 : 'bg-[#1e2e23] text-[#cfc8b4] hover:bg-[#25382b]'
             }`}
           >
-            Lễ Tri Ân & Trưởng Thành
+            Lễ Tri Ân &amp; Trưởng Thành
           </button>
         </div>
 
@@ -227,7 +287,7 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredMemories.map((mem, index) => {
             const rot = index % 3 === 0 ? '-rotate-1' : index % 3 === 1 ? 'rotate-1' : 'rotate-0';
-            const likes = likesState[mem.id] !== undefined ? likesState[mem.id] : mem.likes;
+            const likes = mergeLikeCount(likesState[mem.id], mem.likes);
 
             return (
               <div
@@ -255,10 +315,10 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
                     onClick={() => onSelectMemory(mem)}
                     className="relative aspect-4/3 bg-[#1e2c22] rounded-xs overflow-hidden cursor-pointer group-hover:opacity-95 transition-opacity"
                   >
-                    <img
+                    <SyncedImage
                       src={mem.imageSrc}
+                      fallbackSrc={DEFAULT_MEMORY_PHOTO}
                       alt={mem.title}
-                      referrerPolicy="no-referrer"
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       loading="lazy"
                     />
@@ -295,7 +355,7 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
                   </div>
                 </div>
 
-                {/* Footer of Polaroid: Author & Hearts & Quick Edit */}
+                {/* Footer of Polaroid */}
                 <div className="mt-4 pt-3 border-t border-[#ded7c3] flex items-center justify-between">
                   <span className="font-script-calligraphy text-sm font-bold text-[#5c4a30]">
                     ✍️ {mem.author}
@@ -343,33 +403,43 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
               </div>
               <div>
                 <h3 className="font-serif-vintage text-xl font-bold text-white">
-                  Thay Đổi Ảnh & Kỷ Niệm
+                  Thay Đổi Ảnh &amp; Kỷ Niệm
                 </h3>
                 <span className="text-xs text-[#b8ad95]">
-                  Tùy chỉnh hình ảnh kỷ niệm của Trường THPT Chuyên Sơn La
+                  Ảnh chất lượng cao đồng bộ ngay tới mọi thiết bị
                 </span>
               </div>
             </div>
 
             <form onSubmit={handleSaveEdit} className="space-y-4">
+              {uploadError && (
+                <div className="p-2.5 rounded-lg bg-rose-950/70 border border-rose-500/40 text-xs text-rose-200">
+                  {uploadError}
+                </div>
+              )}
+
               {/* Photo Preview Box */}
               <div>
                 <label className="block text-xs font-semibold text-[#ded5c0] mb-1.5">
                   Hình ảnh hiển thị hiện tại:
                 </label>
                 <div className="relative aspect-video rounded-xl overflow-hidden bg-[#101b13] border-2 border-[#375a40] flex items-center justify-center">
-                  <img
+                  <SyncedImage
                     src={editMethod === 'url' && editUrl ? editUrl : editImageSrc}
+                    fallbackSrc={DEFAULT_MEMORY_PHOTO}
                     alt="Xem trước ảnh"
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png';
-                    }}
                   />
                   <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-xs px-2.5 py-1 rounded text-[11px] text-[#eccb76]">
                     Xem trước trực tiếp
                   </div>
                 </div>
+                {uploadSizeInfo && (
+                  <p className="text-[11px] text-emerald-300 mt-1.5 flex items-center gap-1">
+                    <CloudUpload className="w-3.5 h-3.5" />
+                    <span>{uploadSizeInfo}</span>
+                  </p>
+                )}
               </div>
 
               {/* Upload method toggle */}
@@ -421,7 +491,7 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
                     className="w-full py-3 px-4 rounded-lg bg-[#243c2c] hover:bg-[#2d4b37] border-2 border-dashed border-[#477051] text-xs font-semibold text-[#f5ebd7] transition-colors flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Upload className="w-4 h-4 text-[#eccb76]" />
-                    <span>Nhấp để chọn ảnh từ thư viện máy</span>
+                    <span>Chọn ảnh chất lượng cao từ thư viện máy (tối đa ~25 MB gốc)</span>
                   </button>
                 </div>
               ) : (
@@ -468,8 +538,9 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setEditImageSrc('/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png');
+                      setEditImageSrc(DEFAULT_MEMORY_PHOTO);
                       setEditUrl('');
+                      setUploadSizeInfo(null);
                     }}
                     className="w-full py-2 px-3 rounded-lg bg-[#142318] hover:bg-[#1f3525] border border-[#2e4a36] text-[11px] text-[#cfc5aa] cursor-pointer"
                   >
@@ -526,10 +597,20 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
+                    disabled={isUploading}
+                    className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] disabled:opacity-60 rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
                   >
-                    <Check className="w-4 h-4" />
-                    <span>Lưu thay đổi ảnh</span>
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Đang đồng bộ ảnh...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Lưu thay đổi ảnh</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -556,10 +637,16 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
               </h3>
             </div>
             <p className="text-xs text-[#b8ad95] mb-4 font-body">
-              Chia sẻ những khoảnh khắc, kỷ niệm đẹp đẽ bên thầy cô và mái trường Chuyên Sơn La để lưu giữ vào cuốn album số.
+              Chia sẻ những khoảnh khắc đẹp đẽ bên thầy cô và mái trường Chuyên Sơn La để lưu giữ vào cuốn album số đồng bộ trên mọi thiết bị.
             </p>
 
             <form onSubmit={handleCreateMemory} className="space-y-4">
+              {uploadError && (
+                <div className="p-2.5 rounded-lg bg-rose-950/70 border border-rose-500/40 text-xs text-rose-200">
+                  {uploadError}
+                </div>
+              )}
+
               {/* Photo Upload for New Memory */}
               <div>
                 <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
@@ -601,7 +688,11 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
                       className="w-full py-2.5 px-3 rounded-lg bg-[#22392b] hover:bg-[#2c4937] border border-dashed border-[#446d4d] text-xs font-medium text-[#f5ebd7] transition-colors flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Upload className="w-3.5 h-3.5 text-[#eccb76]" />
-                      <span>{newImageSrc !== '/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png' ? 'Đã chọn ảnh mới (Nhấp để đổi)' : 'Tải ảnh từ điện thoại/máy tính'}</span>
+                      <span>
+                        {newImageSrc !== DEFAULT_MEMORY_PHOTO
+                          ? 'Đã chọn ảnh mới (Nhấp để đổi)'
+                          : 'Tải ảnh từ điện thoại/máy tính (hỗ trợ ảnh lớn)'}
+                      </span>
                     </button>
                   </div>
                 ) : (
@@ -612,6 +703,12 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
                     placeholder="Nhập đường link ảnh..."
                     className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
                   />
+                )}
+                {uploadSizeInfo && (
+                  <p className="text-[11px] text-emerald-300 mt-1.5 flex items-center gap-1">
+                    <CloudUpload className="w-3.5 h-3.5" />
+                    <span>{uploadSizeInfo}</span>
+                  </p>
                 )}
               </div>
 
@@ -682,9 +779,17 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] rounded-lg cursor-pointer shadow-md"
+                  disabled={isUploading}
+                  className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] disabled:opacity-60 rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
                 >
-                  Dán vào Album ký ức
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Đang tải ảnh lên...</span>
+                    </>
+                  ) : (
+                    <span>Dán vào Album ký ức</span>
+                  )}
                 </button>
               </div>
             </form>

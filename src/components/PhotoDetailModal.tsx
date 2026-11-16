@@ -1,6 +1,7 @@
 import React from 'react';
-import { X, Heart, Sparkles, MapPin, Calendar, Award } from 'lucide-react';
+import { X, Sparkles, MapPin, Calendar } from 'lucide-react';
 import { MemoryPhoto } from '../data/memoriesData';
+import { SyncedImage } from './SyncedImage';
 
 interface PhotoDetailModalProps {
   memory: MemoryPhoto | null;
@@ -31,10 +32,10 @@ export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
           {/* Photo on left / top */}
           <div className="lg:col-span-7">
             <div className="relative rounded-xl overflow-hidden bg-[#0d1610] border-2 border-[#2b4432] shadow-2xl">
-              <img
+              <SyncedImage
                 src={memory.imageSrc}
                 alt={memory.title}
-                referrerPolicy="no-referrer"
+                fallbackSrc="/assets/aistudio/image_3c5728ff.png"
                 className="w-full h-auto max-h-[70vh] object-contain mx-auto"
               />
               <div className="absolute bottom-3 left-3 bg-black/70 backdrop-blur-xs px-3 py-1.5 rounded-lg border border-white/20 text-xs flex items-center gap-2">

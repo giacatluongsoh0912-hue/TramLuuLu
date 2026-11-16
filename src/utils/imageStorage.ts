@@ -1,14 +1,13 @@
 /**
  * Image Storage & Compression Utilities
- * Solves the QuotaExceededError in localStorage by compressing user-uploaded images
- * using an HTML5 Canvas, plus IndexedDB persistence with localStorage fallback.
+ * Supports high-capacity image uploads by storing compressed assets in IndexedDB
+ * and uploading large Data URLs as chunked documents in Cloud Firestore.
  */
 
 const DB_NAME = 'csl_app_storage_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'csl_keyval';
 
-// Initialize IndexedDB
 function getDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
@@ -56,19 +55,40 @@ export async function idbSet<T>(key: string, value: T): Promise<void> {
   }
 }
 
+export async function idbRemove(key: string): Promise<void> {
+  try {
+    const db = await getDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch {
+    // ignore
+  }
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
 /**
- * Resizes and compresses an image File to a lightweight Base64 JPEG (~40KB - 80KB)
- * Prevents exceeding localStorage quota (5MB) so images NEVER get lost on refresh.
+ * Resizes and compresses an image File to high-clarity JPEG/WebP Base64.
+ * Supports multi-MB originals (e.g. up to 25 MB camera photos) and preserves
+ * sharp visual detail up to 1600px while keeping chunked Firestore storage reliable.
  */
 export function compressImage(
   file: File,
-  maxWidth = 1000,
-  maxHeight = 1000,
-  quality = 0.8
+  maxWidth = 1600,
+  maxHeight = 1600,
+  quality = 0.88
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    // If SVG or very small, read as is
-    if (file.type === 'image/svg+xml' || file.size < 40000) {
+    if (file.type === 'image/svg+xml' || file.size < 80000) {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = reject;
@@ -103,13 +123,17 @@ export function compressImage(
           return;
         }
 
-        // Draw image smoothly
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Export as JPEG with controlled quality
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        let q = quality;
+        let dataUrl = canvas.toDataURL('image/jpeg', q);
+        // Keep encoded payload safely within ~4.5 MB (up to ~10 Firestore chunks)
+        while (dataUrl.length > 4_500_000 && q > 0.55) {
+          q -= 0.1;
+          dataUrl = canvas.toDataURL('image/jpeg', q);
+        }
         resolve(dataUrl);
       };
       img.onerror = () => resolve(reader.result as string);

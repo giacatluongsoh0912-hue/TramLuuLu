@@ -119,6 +119,64 @@
         "updatedAt": { "type": "number" }
       },
       "required": ["flower9", "flower10"]
+    },
+    "LeadershipMilestone": {
+      "title": "LeadershipMilestone",
+      "description": "Leadership timeline entry across 1995-2026 at THPT Chuyen Son La",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 200 },
+        "title": { "type": "string", "maxLength": 300 },
+        "roleType": { "type": "string", "enum": ["principal", "vice_principal"] },
+        "period": { "type": "string", "maxLength": 150 },
+        "milestoneTitle": { "type": "string", "maxLength": 300 },
+        "contributions": { "type": "string", "maxLength": 4000 },
+        "quote": { "type": "string", "maxLength": 2000 },
+        "avatar": { "type": "string", "maxLength": 950000 },
+        "order": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["name", "title", "roleType"]
+    },
+    "MediaAsset": {
+      "title": "MediaAsset",
+      "description": "Manifest for a chunked uploaded image stored in Firestore",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "mimeType": { "type": "string", "maxLength": 100 },
+        "totalChunks": { "type": "number" },
+        "totalBytes": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "totalChunks", "totalBytes"]
+    },
+    "MediaChunk": {
+      "title": "MediaChunk",
+      "description": "Chunk payload belonging to a MediaAsset",
+      "type": "object",
+      "properties": {
+        "mediaId": { "type": "string", "maxLength": 128 },
+        "index": { "type": "number" },
+        "data": { "type": "string", "maxLength": 600000 }
+      },
+      "required": ["mediaId", "index", "data"]
+    },
+    "FilmFrame": {
+      "title": "FilmFrame",
+      "description": "Editable photo frame inside the cinematic film reel showcase",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string", "maxLength": 200 },
+        "alt": { "type": "string", "maxLength": 200 },
+        "imageSrc": { "type": "string", "maxLength": 500000 },
+        "objectPosition": { "type": "string", "maxLength": 60 },
+        "order": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "label", "imageSrc", "order"]
     }
   },
   "firestore": {
@@ -129,6 +187,10 @@
     "/teachers/{teacherId}": {
       "schema": "Teacher",
       "description": "Faculty profiles with accomplishments and photos"
+    },
+    "/leadership/{leadId}": {
+      "schema": "LeadershipMilestone",
+      "description": "School leadership timeline portraits and milestones"
     },
     "/departments/{departmentId}": {
       "schema": "Department",
@@ -149,6 +211,18 @@
     "/competition_stats/{statId}": {
       "schema": "FlowerScore",
       "description": "Live 20/11 emulation flower scores"
+    },
+    "/media_assets/{mediaId}": {
+      "schema": "MediaAsset",
+      "description": "Metadata manifest for chunked high-capacity user photo uploads"
+    },
+    "/media_chunks/{chunkId}": {
+      "schema": "MediaChunk",
+      "description": "Data chunks for uploaded user photos"
+    },
+    "/film_frames/{frameId}": {
+      "schema": "FilmFrame",
+      "description": "Editable 4-frame showcase inside the cinematic film reel strip"
     }
   }
 }

@@ -1,7 +1,5 @@
 import React, { useState, useRef } from 'react';
 import {
-  Heart,
-  Sparkles,
   Search,
   Plus,
   Camera,
@@ -13,30 +11,44 @@ import {
   BookOpen,
   X,
   Flame,
-  Calendar,
   Clock,
-  Compass,
-  ChevronRight,
   Trash2,
   Edit2,
   AlertTriangle,
+  Loader2,
+  CloudUpload,
 } from 'lucide-react';
-import { TeacherProfile, LEADERSHIP_TIMELINE_DATA, LeadershipMilestone } from '../data/memoriesData';
-import { compressImage } from '../utils/imageStorage';
+import {
+  TeacherProfile,
+  LEADERSHIP_TIMELINE_DATA,
+  LeadershipMilestone,
+} from '../data/memoriesData';
+import { compressImage, formatFileSize } from '../utils/imageStorage';
+import { uploadMediaAsset } from '../utils/syncService';
+import { mergeLikeCount } from '../utils/syncHelpers';
+import { SyncedImage } from './SyncedImage';
+
+const DEFAULT_PORTRAIT_FALLBACK = '/assets/aistudio/Logo_THPT_Chuyen_Son_La_bf6a8e06.png';
 
 interface TeacherGalleryProps {
   teachers: TeacherProfile[];
-  onAddTeacher: (teacher: TeacherProfile) => void;
-  onUpdateTeacher: (teacher: TeacherProfile) => void;
-  onDeleteTeacher?: (id: string) => void;
+  leadership?: LeadershipMilestone[];
+  onAddTeacher: (teacher: TeacherProfile) => Promise<void> | void;
+  onUpdateTeacher: (teacher: TeacherProfile) => Promise<void> | void;
+  onLikeTeacher?: (teacher: TeacherProfile) => Promise<void> | void;
+  onDeleteTeacher?: (id: string) => Promise<void> | void;
+  onUpdateLeadership?: (item: LeadershipMilestone) => Promise<void> | void;
   onSendTributeToTeacher: (teacherName: string, department: string) => void;
 }
 
 export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   teachers,
+  leadership,
   onAddTeacher,
   onUpdateTeacher,
+  onLikeTeacher,
   onDeleteTeacher,
+  onUpdateLeadership,
   onSendTributeToTeacher,
 }) => {
   const [activeTab, setActiveTab] = useState<'timeline' | 'faculty'>('timeline');
@@ -44,8 +56,12 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [likesState, setLikesState] = useState<Record<string, number>>({});
   const [editingTeacher, setEditingTeacher] = useState<TeacherProfile | null>(null);
+  const [editingLeader, setEditingLeader] = useState<LeadershipMilestone | null>(null);
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
   const [deletingTeacherId, setDeletingTeacherId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSizeInfo, setUploadSizeInfo] = useState<string | null>(null);
 
   // Edit teacher state
   const [editAvatar, setEditAvatar] = useState('');
@@ -61,6 +77,18 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   const [editBio, setEditBio] = useState('');
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Edit leader state
+  const [leadAvatar, setLeadAvatar] = useState('');
+  const [leadMethod, setLeadMethod] = useState<'upload' | 'url'>('upload');
+  const [leadUrl, setLeadUrl] = useState('');
+  const [leadName, setLeadName] = useState('');
+  const [leadTitle, setLeadTitle] = useState('');
+  const [leadPeriod, setLeadPeriod] = useState('');
+  const [leadMilestoneTitle, setLeadMilestoneTitle] = useState('');
+  const [leadContributions, setLeadContributions] = useState('');
+  const [leadQuote, setLeadQuote] = useState('');
+  const leadFileInputRef = useRef<HTMLInputElement>(null);
+
   // New teacher state
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('Giáo viên Bộ môn');
@@ -70,10 +98,13 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   const [newAchievements, setNewAchievements] = useState('Giáo viên tận tâm, Tri ân 20/11');
   const [newQuote, setNewQuote] = useState('');
   const [newBio, setNewBio] = useState('');
-  const [newAvatar, setNewAvatar] = useState('https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=400&q=80');
+  const [newAvatar, setNewAvatar] = useState(DEFAULT_PORTRAIT_FALLBACK);
   const [addMethod, setAddMethod] = useState<'upload' | 'url'>('upload');
   const [addUrl, setAddUrl] = useState('');
   const addFileInputRef = useRef<HTMLInputElement>(null);
+
+  const timelineItems =
+    leadership && leadership.length > 0 ? leadership : LEADERSHIP_TIMELINE_DATA;
 
   const departments = [
     { id: 'all', label: 'Tất Cả Thầy Cô' },
@@ -104,48 +135,52 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
   });
 
   const handleToggleLike = (id: string, initialLikes: number) => {
-    const current = likesState[id] !== undefined ? likesState[id] : initialLikes;
+    const teacher = teachers.find((t) => t.id === id);
+    const current = mergeLikeCount(likesState[id], teacher?.likes ?? initialLikes);
     const nextLikes = current + 1;
     setLikesState((prev) => ({ ...prev, [id]: nextLikes }));
-    const teacher = teachers.find((t) => t.id === id);
     if (teacher) {
-      onUpdateTeacher({ ...teacher, likes: nextLikes });
+      if (onLikeTeacher) {
+        onLikeTeacher(teacher);
+      } else {
+        onUpdateTeacher({ ...teacher, likes: nextLikes });
+      }
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {
+  const handleFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    target: 'edit' | 'add' | 'leader'
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadError(null);
 
     try {
-      const compressed = await compressImage(file, 800, 800, 0.8);
-      if (isEditing) {
-        setEditAvatar(compressed);
-      } else {
-        setNewAvatar(compressed);
-      }
+      const compressed = await compressImage(file, 1600, 1600, 0.88);
+      const approxBytes = Math.round((compressed.length * 3) / 4);
+      setUploadSizeInfo(
+        `Ảnh gốc ${formatFileSize(file.size)} → Tối ưu chất lượng cao ${formatFileSize(approxBytes)}`
+      );
+
+      if (target === 'edit') setEditAvatar(compressed);
+      else if (target === 'leader') setLeadAvatar(compressed);
+      else setNewAvatar(compressed);
     } catch {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          if (isEditing) {
-            setEditAvatar(reader.result);
-          } else {
-            setNewAvatar(reader.result);
-          }
-        }
-      };
-      reader.readAsDataURL(file);
+      setUploadError('Không thể đọc tệp ảnh này. Vui lòng thử lại với định dạng JPG/PNG.');
     }
   };
 
   const handleOpenEdit = (t: TeacherProfile) => {
+    setUploadError(null);
+    setUploadSizeInfo(null);
     setEditingTeacher(t);
     setEditAvatar(t.avatar);
     setEditName(t.name);
     setEditRole(t.role);
-    // If t.department is one of standard ids, use it; otherwise 'custom'
-    const matchDept = departments.some((d) => d.id === t.department && d.id !== 'all' && d.id !== 'custom');
+    const matchDept = departments.some(
+      (d) => d.id === t.department && d.id !== 'all' && d.id !== 'custom'
+    );
     if (matchDept) {
       setEditDept(t.department);
       setEditCustomDept('');
@@ -157,88 +192,196 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
     setEditAchievements(Array.isArray(t.achievements) ? t.achievements.join(', ') : '');
     setEditQuote(t.quote);
     setEditBio(t.bio);
-    setEditUrl(t.avatar.startsWith('data:') ? '' : t.avatar);
+    setEditMethod('upload');
+    setEditUrl(t.avatar.startsWith('data:') || t.avatar.startsWith('media://') ? '' : t.avatar);
     setDeletingTeacherId(null);
   };
 
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingTeacher) return;
+    if (!editingTeacher || isUploading) return;
 
-    const finalAvatar = editMethod === 'url' && editUrl.trim() ? editUrl.trim() : editAvatar;
-    const deptObj = departments.find((d) => d.id === editDept);
-    const finalDeptName =
-      editDept === 'custom' && editCustomDept.trim()
-        ? editCustomDept.trim()
-        : deptObj
-        ? deptObj.label
-        : editingTeacher.departmentName;
+    setIsUploading(true);
+    setUploadError(null);
+    try {
+      let finalAvatar =
+        editMethod === 'url' && editUrl.trim() ? editUrl.trim() : editAvatar;
+      if (finalAvatar.startsWith('data:')) {
+        finalAvatar = await uploadMediaAsset(finalAvatar);
+      }
 
-    const updated: TeacherProfile = {
-      ...editingTeacher,
-      name: editName.trim() || editingTeacher.name,
-      role: editRole.trim() || editingTeacher.role,
-      department: editDept === 'custom' ? 'custom' : editDept,
-      departmentName: finalDeptName,
-      yearsOfService: editYearsOfService.trim() || editingTeacher.yearsOfService,
-      achievements: editAchievements.trim()
-        ? editAchievements.split(',').map((s) => s.trim()).filter(Boolean)
-        : editingTeacher.achievements,
-      quote: editQuote.trim() || editingTeacher.quote,
-      bio: editBio.trim() || editingTeacher.bio,
-      avatar: finalAvatar || editingTeacher.avatar,
-    };
+      const deptObj = departments.find((d) => d.id === editDept);
+      const finalDeptName =
+        editDept === 'custom' && editCustomDept.trim()
+          ? editCustomDept.trim()
+          : deptObj
+          ? deptObj.label
+          : editingTeacher.departmentName;
 
-    onUpdateTeacher(updated);
-    setEditingTeacher(null);
+      const updated: TeacherProfile = {
+        ...editingTeacher,
+        name: editName.trim() || editingTeacher.name,
+        role: editRole.trim() || editingTeacher.role,
+        department: editDept === 'custom' ? 'custom' : editDept,
+        departmentName: finalDeptName,
+        yearsOfService: editYearsOfService.trim() || editingTeacher.yearsOfService,
+        achievements: editAchievements.trim()
+          ? editAchievements
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : editingTeacher.achievements,
+        quote: editQuote.trim() || editingTeacher.quote,
+        bio: editBio.trim() || editingTeacher.bio,
+        avatar: finalAvatar || editingTeacher.avatar,
+      };
+
+      await onUpdateTeacher(updated);
+      setEditingTeacher(null);
+      setUploadSizeInfo(null);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error
+          ? err.message
+          : 'Không thể tải ảnh lên đám mây. Vui lòng thử lại.'
+      );
+    } finally {
+      setIsUploading(false);
+    }
   };
 
-  const handleCreateTeacher = (e: React.FormEvent) => {
+  const handleCreateTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newQuote.trim()) return;
+    if (!newName.trim() || !newQuote.trim() || isUploading) return;
 
-    const finalAvatar = addMethod === 'url' && addUrl.trim() ? addUrl.trim() : newAvatar;
-    const deptObj = departments.find((d) => d.id === newDept);
-    const finalDeptName =
-      newDept === 'custom' && newCustomDept.trim()
-        ? newCustomDept.trim()
-        : deptObj
-        ? deptObj.label
-        : 'Tổ Chuyên Môn';
+    setIsUploading(true);
+    setUploadError(null);
+    try {
+      let finalAvatar =
+        addMethod === 'url' && addUrl.trim() ? addUrl.trim() : newAvatar;
+      if (finalAvatar.startsWith('data:')) {
+        finalAvatar = await uploadMediaAsset(finalAvatar);
+      }
 
-    const newT: TeacherProfile = {
-      id: 'tch-' + Date.now(),
-      name: newName.trim(),
-      role: newRole.trim(),
-      department: newDept === 'custom' ? 'custom' : newDept,
-      departmentName: finalDeptName,
-      avatar: finalAvatar,
-      quote: newQuote.trim(),
-      achievements: newAchievements.trim()
-        ? newAchievements.split(',').map((s) => s.trim()).filter(Boolean)
-        : ['Giáo viên tận tâm', 'Tri ân 20/11'],
-      bio: newBio.trim() || 'Thầy cô luôn là tấm gương sáng dìu dắt bao thế hệ học sinh Chuyên Sơn La khôn lớn và trưởng thành.',
-      yearsOfService: newYearsOfService.trim() || 'Nhiều năm cống hiến',
-      likes: 1,
-    };
+      const deptObj = departments.find((d) => d.id === newDept);
+      const finalDeptName =
+        newDept === 'custom' && newCustomDept.trim()
+          ? newCustomDept.trim()
+          : deptObj
+          ? deptObj.label
+          : 'Tổ Chuyên Môn';
 
-    onAddTeacher(newT);
-    setNewName('');
-    setNewRole('Giáo viên Bộ môn');
-    setNewQuote('');
-    setNewBio('');
-    setNewCustomDept('');
-    setNewAchievements('Giáo viên tận tâm, Tri ân 20/11');
-    setNewYearsOfService('Nhiều năm cống hiến');
-    setAddUrl('');
-    setNewAvatar('/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png');
-    setIsAddingTeacher(false);
+      const now = Date.now();
+      const newT: TeacherProfile = {
+        id: 'tch-' + now,
+        name: newName.trim(),
+        role: newRole.trim(),
+        department: newDept === 'custom' ? 'custom' : newDept,
+        departmentName: finalDeptName,
+        avatar: finalAvatar,
+        quote: newQuote.trim(),
+        achievements: newAchievements.trim()
+          ? newAchievements
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : ['Giáo viên tận tâm', 'Tri ân 20/11'],
+        bio:
+          newBio.trim() ||
+          'Thầy cô luôn là tấm gương sáng dìu dắt bao thế hệ học sinh Chuyên Sơn La khôn lớn và trưởng thành.',
+        yearsOfService: newYearsOfService.trim() || 'Nhiều năm cống hiến',
+        likes: 1,
+        createdAt: now,
+      };
+
+      await onAddTeacher(newT);
+      setNewName('');
+      setNewRole('Giáo viên Bộ môn');
+      setNewQuote('');
+      setNewBio('');
+      setNewCustomDept('');
+      setNewAchievements('Giáo viên tận tâm, Tri ân 20/11');
+      setNewYearsOfService('Nhiều năm cống hiến');
+      setAddUrl('');
+      setNewAvatar(DEFAULT_PORTRAIT_FALLBACK);
+      setUploadSizeInfo(null);
+      setIsAddingTeacher(false);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error
+          ? err.message
+          : 'Không thể tải ảnh lên đám mây. Vui lòng thử lại.'
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleOpenEditLeader = (item: LeadershipMilestone) => {
+    setUploadError(null);
+    setUploadSizeInfo(null);
+    setEditingLeader(item);
+    setLeadAvatar(item.avatar);
+    setLeadName(item.name);
+    setLeadTitle(item.title);
+    setLeadPeriod(item.period);
+    setLeadMilestoneTitle(item.milestoneTitle);
+    setLeadContributions(item.contributions);
+    setLeadQuote(item.quote);
+    setLeadMethod('upload');
+    setLeadUrl(
+      item.avatar.startsWith('data:') || item.avatar.startsWith('media://')
+        ? ''
+        : item.avatar
+    );
+  };
+
+  const handleSaveLeader = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLeader || isUploading) return;
+
+    setIsUploading(true);
+    setUploadError(null);
+    try {
+      let finalAvatar =
+        leadMethod === 'url' && leadUrl.trim() ? leadUrl.trim() : leadAvatar;
+      if (finalAvatar.startsWith('data:')) {
+        finalAvatar = await uploadMediaAsset(finalAvatar);
+      }
+
+      const updated: LeadershipMilestone = {
+        ...editingLeader,
+        name: leadName.trim() || editingLeader.name,
+        title: leadTitle.trim() || editingLeader.title,
+        period: leadPeriod.trim() || editingLeader.period,
+        milestoneTitle: leadMilestoneTitle.trim() || editingLeader.milestoneTitle,
+        contributions: leadContributions.trim() || editingLeader.contributions,
+        quote: leadQuote.trim() || editingLeader.quote,
+        avatar: finalAvatar || editingLeader.avatar,
+      };
+
+      if (onUpdateLeadership) {
+        await onUpdateLeadership(updated);
+      }
+      setEditingLeader(null);
+      setUploadSizeInfo(null);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error
+          ? err.message
+          : 'Không thể đồng bộ ảnh lãnh đạo. Vui lòng thử lại.'
+      );
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
-    <section id="teachers" className="py-16 bg-[#0c160f]/80 backdrop-blur-md relative border-b border-[#25392c]/80">
+    <section
+      id="teachers"
+      className="py-16 bg-[#0c160f]/80 backdrop-blur-md relative border-b border-[#25392c]/80"
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
         {/* Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 pb-6 border-b border-[#2b4433]">
           <div>
@@ -247,16 +390,29 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
               <span>Gương Mặt Người Dẫn Lối · THPT Chuyên Sơn La (1995 – 2026)</span>
             </div>
             <h2 className="font-serif-vintage text-3xl sm:text-4xl font-bold text-white tracking-tight">
-              Các Thế Hệ Thầy Cô & Lãnh Đạo Nhà Trường
+              Các Thế Hệ Thầy Cô &amp; Lãnh Đạo Nhà Trường
             </h2>
             <p className="text-sm text-[#b8ad95] mt-2 max-w-2xl font-body leading-relaxed">
-              Dữ liệu chuẩn từ tư liệu 30 năm Trường THPT Chuyên Sơn La (<a href="https://edu.viettel.vn/sla-thptchuyensonla/tin-tuc-su-kien/cac-the-he-ht-pht-qua-cac-thoi-ky" target="_blank" rel="noopener noreferrer" className="text-[#eccb76] underline hover:text-white">Cổng thông tin điện tử trường</a>). Bày tỏ lòng tri ân sâu sắc tới các thế hệ Hiệu trưởng, Phó Hiệu trưởng và thầy cô giáo.
+              Chân dung và tư liệu chính thức kỷ niệm 30 năm Trường THPT Chuyên Sơn La (
+              <a
+                href="https://edu.viettel.vn/sla-thptchuyensonla/tin-tuc-su-kien/cac-the-he-ht-pht-qua-cac-thoi-ky"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#eccb76] underline hover:text-white"
+              >
+                Cổng thông tin điện tử nhà trường
+              </a>
+              ). Mọi chỉnh sửa và ảnh tải lên được đồng bộ trực tiếp tới mọi thiết bị.
             </p>
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
             <button
-              onClick={() => setIsAddingTeacher(true)}
+              onClick={() => {
+                setUploadError(null);
+                setUploadSizeInfo(null);
+                setIsAddingTeacher(true);
+              }}
               className="px-4 py-2.5 rounded-lg bg-[#253e2d] hover:bg-[#32523d] text-[#f5ebd7] text-xs font-semibold border border-[#3e664b] transition-all flex items-center gap-2 cursor-pointer shadow-sm"
             >
               <Plus className="w-4 h-4 text-[#eccb76]" />
@@ -305,7 +461,7 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
             </div>
 
             <div className="relative border-l-2 border-[#eccb76]/40 ml-4 md:ml-32 space-y-8 pl-6 md:pl-10">
-              {LEADERSHIP_TIMELINE_DATA.map((item, idx) => (
+              {timelineItems.map((item, idx) => (
                 <div key={item.id} className="relative group">
                   {/* Timeline Node Icon */}
                   <div className="absolute -left-[35px] md:-left-[51px] top-1.5 w-6 h-6 md:w-8 md:h-8 rounded-full bg-[#eccb76] border-4 border-[#0f1912] shadow-lg flex items-center justify-center text-[#1c1810] font-bold text-xs">
@@ -321,35 +477,62 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
 
                   {/* Timeline Card */}
                   <div className="p-6 rounded-2xl bg-[#15241b] border border-[#2b4433] hover:border-[#eccb76]/60 shadow-xl transition-all duration-300 hover:-translate-y-1">
-                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                            item.roleType === 'principal'
-                              ? 'bg-amber-950 text-amber-300 border border-amber-500/40'
-                              : 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
-                          }`}>
-                            {item.title}
-                          </span>
-                          <span className="text-xs font-mono text-[#eccb76]">
-                            {item.period}
-                          </span>
+                    <div className="flex flex-col sm:flex-row items-start justify-between gap-5 mb-4">
+                      {/* Leader Portrait + Identity */}
+                      <div className="flex items-start gap-4 flex-1 min-w-0">
+                        <div className="relative shrink-0">
+                          <SyncedImage
+                            src={item.avatar}
+                            fallbackSrc={DEFAULT_PORTRAIT_FALLBACK}
+                            alt={item.name}
+                            className="w-20 h-24 sm:w-24 sm:h-28 rounded-xl object-cover object-top border-2 border-[#eccb76]/50 bg-[#0d1710] shadow-md group-hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                          />
                         </div>
-                        <h3 className="font-serif-vintage text-xl md:text-2xl font-bold text-white mt-1 group-hover:text-[#eccb76] transition-colors">
-                          {item.name}
-                        </h3>
-                        <p className="text-xs text-[#eccb76] font-medium mt-0.5">
-                          ✦ {item.milestoneTitle}
-                        </p>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                                item.roleType === 'principal'
+                                  ? 'bg-amber-950 text-amber-300 border border-amber-500/40'
+                                  : 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                              }`}
+                            >
+                              {item.title}
+                            </span>
+                            <span className="text-xs font-mono text-[#eccb76]">
+                              {item.period}
+                            </span>
+                          </div>
+                          <h3 className="font-serif-vintage text-xl md:text-2xl font-bold text-white mt-1.5 group-hover:text-[#eccb76] transition-colors">
+                            {item.name}
+                          </h3>
+                          <p className="text-xs text-[#eccb76] font-medium mt-0.5">
+                            ✦ {item.milestoneTitle}
+                          </p>
+                        </div>
                       </div>
 
-                      <button
-                        onClick={() => onSendTributeToTeacher(item.name, 'Ban Giám Hiệu')}
-                        className="py-2 px-4 rounded-xl bg-[#cbbaa1] hover:bg-[#e4d4bd] text-[#1c1810] text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0"
-                      >
-                        <Feather className="w-3.5 h-3.5" />
-                        <span>Gửi tri ân thầy/cô</span>
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0 self-start">
+                        {onUpdateLeadership && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditLeader(item)}
+                            title="Sửa ảnh hoặc thông tin lãnh đạo"
+                            className="p-2 rounded-xl bg-[#1f3426] hover:bg-[#2c4a36] text-[#eccb76] border border-[#3a6045] transition-all cursor-pointer shadow-sm"
+                          >
+                            <Camera className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => onSendTributeToTeacher(item.name, 'Ban Giám Hiệu')}
+                          className="py-2 px-4 rounded-xl bg-[#cbbaa1] hover:bg-[#e4d4bd] text-[#1c1810] text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0"
+                        >
+                          <Feather className="w-3.5 h-3.5" />
+                          <span>Gửi tri ân thầy/cô</span>
+                        </button>
+                      </div>
                     </div>
 
                     <p className="text-xs text-[#cfc5aa] leading-relaxed font-body mb-4">
@@ -410,7 +593,7 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
         {activeTab === 'faculty' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {filteredTeachers.map((tch) => {
-              const likes = likesState[tch.id] !== undefined ? likesState[tch.id] : tch.likes;
+              const likes = mergeLikeCount(likesState[tch.id], tch.likes);
 
               return (
                 <div
@@ -420,11 +603,11 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
                   {/* Top Photo & Role */}
                   <div>
                     <div className="relative aspect-4/3 bg-[#0d1710] overflow-hidden">
-                      <img
+                      <SyncedImage
                         src={tch.avatar}
+                        fallbackSrc={DEFAULT_PORTRAIT_FALLBACK}
                         alt={tch.name}
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
                         loading="lazy"
                       />
 
@@ -524,7 +707,7 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
                   </div>
 
                   {/* Card Action Buttons */}
-                  <div className="p-5 pt-0 border-t border-[#223528] mt-3 pt-3 flex items-center justify-between gap-2">
+                  <div className="p-5 pt-3 border-t border-[#223528] mt-3 flex items-center justify-between gap-2">
                     <button
                       onClick={() => onSendTributeToTeacher(tch.name, tch.departmentName)}
                       className="flex-1 py-2 px-3 rounded-lg bg-[#cbbaa1] hover:bg-[#d9ccb6] text-[#1c1810] text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
@@ -543,13 +726,227 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
                       <span className="font-mono text-[#f6eedc] text-xs">{likes}</span>
                     </button>
                   </div>
-
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Edit Leadership Milestone Modal */}
+      {editingLeader && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-[#1b2b20] border-2 border-[#e4c77d]/60 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative my-6 text-[#f6eedc]">
+            <button
+              onClick={() => setEditingLeader(null)}
+              className="absolute top-4 right-4 text-[#cfc5aa] hover:text-white p-1 rounded-lg cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-[#2d4734]">
+              <div className="w-9 h-9 rounded-full bg-[#eccb76] text-[#1c1810] flex items-center justify-center font-bold">
+                <Camera className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-serif-vintage text-xl font-bold text-white">
+                  Cập Nhật Chân Dung Lãnh Đạo
+                </h3>
+                <span className="text-xs text-[#b8ad95]">
+                  Đồng bộ trực tiếp trên Dòng Thời Gian (1995 – 2026)
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveLeader} className="space-y-4">
+              {uploadError && (
+                <div className="p-2.5 rounded-lg bg-rose-950/70 border border-rose-500/40 text-xs text-rose-200">
+                  {uploadError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-[#ded5c0] mb-1.5">
+                  Ảnh chân dung xem trước:
+                </label>
+                <div className="relative aspect-4/3 max-h-56 mx-auto rounded-xl overflow-hidden bg-[#101b13] border-2 border-[#375a40] flex items-center justify-center">
+                  <SyncedImage
+                    src={leadMethod === 'url' && leadUrl ? leadUrl : leadAvatar}
+                    fallbackSrc={DEFAULT_PORTRAIT_FALLBACK}
+                    alt="Xem trước ảnh lãnh đạo"
+                    className="w-full h-full object-cover object-top"
+                  />
+                  <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-xs px-2.5 py-1 rounded text-[11px] text-[#eccb76]">
+                    Xem trước trực tiếp
+                  </div>
+                </div>
+                {uploadSizeInfo && (
+                  <p className="text-[11px] text-emerald-300 mt-1.5 flex items-center gap-1">
+                    <CloudUpload className="w-3.5 h-3.5" />
+                    <span>{uploadSizeInfo}</span>
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLeadMethod('upload')}
+                  className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    leadMethod === 'upload'
+                      ? 'bg-[#cbbaa1] text-[#1a160f] border-[#cbbaa1]'
+                      : 'bg-[#121d15] text-[#cfc5aa] border-[#2b4432]'
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Tải ảnh từ máy</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeadMethod('url')}
+                  className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    leadMethod === 'url'
+                      ? 'bg-[#cbbaa1] text-[#1a160f] border-[#cbbaa1]'
+                      : 'bg-[#121d15] text-[#cfc5aa] border-[#2b4432]'
+                  }`}
+                >
+                  <LinkIcon className="w-3.5 h-3.5" />
+                  <span>Nhập link ảnh (URL)</span>
+                </button>
+              </div>
+
+              {leadMethod === 'upload' ? (
+                <div>
+                  <input
+                    ref={leadFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileChange(e, 'leader')}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => leadFileInputRef.current?.click()}
+                    className="w-full py-2.5 px-3 rounded-lg bg-[#22392b] hover:bg-[#2c4937] border border-dashed border-[#446d4d] text-xs font-medium text-[#f5ebd7] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-[#eccb76]" />
+                    <span>Chọn ảnh chất lượng cao từ máy/điện thoại (tới 25 MB)</span>
+                  </button>
+                </div>
+              ) : (
+                <input
+                  type="url"
+                  value={leadUrl}
+                  onChange={(e) => setLeadUrl(e.target.value)}
+                  placeholder="https://... hoặc /assets/..."
+                  className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                />
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Họ và tên:
+                  </label>
+                  <input
+                    type="text"
+                    value={leadName}
+                    onChange={(e) => setLeadName(e.target.value)}
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Chức danh:
+                  </label>
+                  <input
+                    type="text"
+                    value={leadTitle}
+                    onChange={(e) => setLeadTitle(e.target.value)}
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Giai đoạn công tác:
+                  </label>
+                  <input
+                    type="text"
+                    value={leadPeriod}
+                    onChange={(e) => setLeadPeriod(e.target.value)}
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                    Dấu ấn nổi bật:
+                  </label>
+                  <input
+                    type="text"
+                    value={leadMilestoneTitle}
+                    onChange={(e) => setLeadMilestoneTitle(e.target.value)}
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                  Đóng góp qua các thời kỳ:
+                </label>
+                <textarea
+                  rows={3}
+                  value={leadContributions}
+                  onChange={(e) => setLeadContributions(e.target.value)}
+                  className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d] resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
+                  Trích dẫn / Thông điệp:
+                </label>
+                <input
+                  type="text"
+                  value={leadQuote}
+                  onChange={(e) => setLeadQuote(e.target.value)}
+                  className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-3 border-t border-[#2a4332]">
+                <button
+                  type="button"
+                  onClick={() => setEditingLeader(null)}
+                  className="px-4 py-2 text-xs font-medium text-[#c0b59b] hover:text-white rounded-lg cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUploading}
+                  className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] disabled:opacity-60 rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Đang đồng bộ ảnh...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Lưu &amp; Đồng bộ</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Edit Teacher Modal */}
       {editingTeacher && (
@@ -568,7 +965,7 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
               </div>
               <div>
                 <h3 className="font-serif-vintage text-xl font-bold text-white">
-                  Đổi Ảnh & Thông Tin Thầy Cô
+                  Đổi Ảnh &amp; Thông Tin Thầy Cô
                 </h3>
                 <span className="text-xs text-[#b8ad95]">
                   Cập nhật ảnh chân dung và lời nhắn gửi của {editingTeacher.name}
@@ -577,24 +974,34 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
             </div>
 
             <form onSubmit={handleSaveEdit} className="space-y-4">
+              {uploadError && (
+                <div className="p-2.5 rounded-lg bg-rose-950/70 border border-rose-500/40 text-xs text-rose-200">
+                  {uploadError}
+                </div>
+              )}
+
               {/* Photo Preview Box */}
               <div>
                 <label className="block text-xs font-semibold text-[#ded5c0] mb-1.5">
                   Ảnh chân dung hiện tại:
                 </label>
-                <div className="relative aspect-video rounded-xl overflow-hidden bg-[#101b13] border-2 border-[#375a40] flex items-center justify-center">
-                  <img
+                <div className="relative aspect-4/3 max-h-56 mx-auto rounded-xl overflow-hidden bg-[#101b13] border-2 border-[#375a40] flex items-center justify-center">
+                  <SyncedImage
                     src={editMethod === 'url' && editUrl ? editUrl : editAvatar}
+                    fallbackSrc={DEFAULT_PORTRAIT_FALLBACK}
                     alt="Xem trước ảnh thầy cô"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png';
-                    }}
+                    className="w-full h-full object-cover object-top"
                   />
                   <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-xs px-2.5 py-1 rounded text-[11px] text-[#eccb76]">
                     Xem trước trực tiếp
                   </div>
                 </div>
+                {uploadSizeInfo && (
+                  <p className="text-[11px] text-emerald-300 mt-1.5 flex items-center gap-1">
+                    <CloudUpload className="w-3.5 h-3.5" />
+                    <span>{uploadSizeInfo}</span>
+                  </p>
+                )}
               </div>
 
               {/* Upload method toggle */}
@@ -633,7 +1040,7 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
                     ref={editFileInputRef}
                     type="file"
                     accept="image/*"
-                    onChange={(e) => handleFileChange(e, true)}
+                    onChange={(e) => handleFileChange(e, 'edit')}
                     className="hidden"
                   />
                   <button
@@ -642,7 +1049,7 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
                     className="w-full py-2.5 px-3 rounded-lg bg-[#22392b] hover:bg-[#2c4937] border border-dashed border-[#446d4d] text-xs font-medium text-[#f5ebd7] transition-colors flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Upload className="w-3.5 h-3.5 text-[#eccb76]" />
-                    <span>Tải ảnh chân dung từ máy/điện thoại</span>
+                    <span>Tải ảnh chân dung chất lượng cao (tối đa ~25 MB gốc)</span>
                   </button>
                 </div>
               ) : (
@@ -770,10 +1177,20 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
+                  disabled={isUploading}
+                  className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] disabled:opacity-60 rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
                 >
-                  <Check className="w-4 h-4" />
-                  <span>Lưu thông tin</span>
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Đang tải ảnh lên...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Lưu thông tin</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -799,10 +1216,16 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
               </h3>
             </div>
             <p className="text-xs text-[#b8ad95] mb-4 font-body">
-              Thêm thầy cô chủ nhiệm hoặc bộ môn của lớp bạn vào danh sách để tập thể cùng gửi lời chúc 20/11.
+              Thêm thầy cô chủ nhiệm hoặc bộ môn của lớp bạn vào danh sách để tập thể cùng gửi lời chúc 20/11. Hỗ trợ tải ảnh dung lượng lớn và đồng bộ ngay lập tức.
             </p>
 
             <form onSubmit={handleCreateTeacher} className="space-y-4">
+              {uploadError && (
+                <div className="p-2.5 rounded-lg bg-rose-950/70 border border-rose-500/40 text-xs text-rose-200">
+                  {uploadError}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
@@ -890,24 +1313,73 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
 
               {/* Photo Input */}
               <div>
-                <label className="block text-xs font-semibold text-[#ded5c0] mb-1">
-                  Ảnh chân dung:
-                </label>
-                <input
-                  ref={addFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleFileChange(e, false)}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => addFileInputRef.current?.click()}
-                  className="w-full py-2.5 px-3 rounded-lg bg-[#22392b] hover:bg-[#2c4937] border border-dashed border-[#446d4d] text-xs font-medium text-[#f5ebd7] transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Upload className="w-3.5 h-3.5 text-[#eccb76]" />
-                  <span>{newAvatar !== '/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png' ? 'Đã tải ảnh lên (Nhấp để đổi)' : 'Tải ảnh từ máy / điện thoại'}</span>
-                </button>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-[#ded5c0]">
+                    Ảnh chân dung:
+                  </label>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setAddMethod('upload')}
+                      className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer border ${
+                        addMethod === 'upload'
+                          ? 'bg-[#cbbaa1] text-[#1a160f] border-[#cbbaa1]'
+                          : 'bg-[#121d15] text-[#cfc5aa] border-[#2b4432]'
+                      }`}
+                    >
+                      Tải từ máy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAddMethod('url')}
+                      className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer border ${
+                        addMethod === 'url'
+                          ? 'bg-[#cbbaa1] text-[#1a160f] border-[#cbbaa1]'
+                          : 'bg-[#121d15] text-[#cfc5aa] border-[#2b4432]'
+                      }`}
+                    >
+                      Link URL
+                    </button>
+                  </div>
+                </div>
+
+                {addMethod === 'upload' ? (
+                  <div>
+                    <input
+                      ref={addFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleFileChange(e, 'add')}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addFileInputRef.current?.click()}
+                      className="w-full py-2.5 px-3 rounded-lg bg-[#22392b] hover:bg-[#2c4937] border border-dashed border-[#446d4d] text-xs font-medium text-[#f5ebd7] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-[#eccb76]" />
+                      <span>
+                        {newAvatar !== DEFAULT_PORTRAIT_FALLBACK
+                          ? 'Đã chọn ảnh chân dung (Nhấp để đổi)'
+                          : 'Tải ảnh từ máy / điện thoại (hỗ trợ ảnh lớn)'}
+                      </span>
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="url"
+                    value={addUrl}
+                    onChange={(e) => setAddUrl(e.target.value)}
+                    placeholder="https://... hoặc /assets/..."
+                    className="w-full bg-[#131f17] border border-[#334e3a] rounded-lg px-3 py-2 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                  />
+                )}
+                {uploadSizeInfo && (
+                  <p className="text-[11px] text-emerald-300 mt-1 flex items-center gap-1">
+                    <CloudUpload className="w-3.5 h-3.5" />
+                    <span>{uploadSizeInfo}</span>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -947,16 +1419,23 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] rounded-lg cursor-pointer shadow-md"
+                  disabled={isUploading}
+                  className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] disabled:opacity-60 rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
                 >
-                  Thêm vào danh sách
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Đang tải ảnh lên...</span>
+                    </>
+                  ) : (
+                    <span>Thêm vào danh sách</span>
+                  )}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
     </section>
   );
 };

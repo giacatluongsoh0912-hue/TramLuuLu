@@ -6,20 +6,15 @@ interface TeacherTributesProps {
   departments: DepartmentFaculty[];
   onSelectDepartmentForLetter: (deptName: string) => void;
   onUpdateDepartment?: (dept: DepartmentFaculty) => void;
+  onLightCandle?: (dept: DepartmentFaculty) => void;
 }
 
 export const TeacherTributes: React.FC<TeacherTributesProps> = ({
   departments,
   onSelectDepartmentForLetter,
   onUpdateDepartment,
+  onLightCandle,
 }) => {
-  const [candles, setCandles] = useState<Record<string, number>>(() => {
-    const map: Record<string, number> = {};
-    departments.forEach((d) => {
-      map[d.id] = d.candleCount;
-    });
-    return map;
-  });
 
   const [recentlyLit, setRecentlyLit] = useState<string | null>(null);
 
@@ -61,31 +56,25 @@ export const TeacherTributes: React.FC<TeacherTributesProps> = ({
   };
 
   const handleLightCandle = (deptId: string, deptName: string, initialCandles: number) => {
-    const nextCount = (candles[deptId] !== undefined ? candles[deptId] : initialCandles) + 1;
-    setCandles((prev) => ({
-      ...prev,
-      [deptId]: nextCount,
-    }));
+    const nextCount = initialCandles + 1;
     setRecentlyLit(deptName);
     setTimeout(() => {
       setRecentlyLit(null);
     }, 3000);
 
-    if (onUpdateDepartment) {
-      const dept = departments.find((d) => d.id === deptId);
-      if (dept) {
-        onUpdateDepartment({ ...dept, candleCount: nextCount });
-      }
+    const dept = departments.find((d) => d.id === deptId);
+    if (!dept) return;
+    if (onLightCandle) {
+      onLightCandle(dept);
+    } else if (onUpdateDepartment) {
+      onUpdateDepartment({ ...dept, candleCount: nextCount });
     }
   };
 
-  const totalCandles = departments.reduce(
-    (sum, d) => sum + (candles[d.id] !== undefined ? candles[d.id] : d.candleCount),
-    0
-  );
+  const totalCandles = departments.reduce((sum, d) => sum + (d.candleCount || 0), 0);
 
   return (
-    <section id="teachers" className="py-16 bg-[#0d1710]/80 backdrop-blur-md relative border-b border-[#24392b]/80">
+    <section id="departments" className="py-16 bg-[#0d1710]/80 backdrop-blur-md relative border-b border-[#24392b]/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-12">
@@ -118,7 +107,7 @@ export const TeacherTributes: React.FC<TeacherTributesProps> = ({
         {/* Department Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {departments.map((dept) => {
-            const candleCount = candles[dept.id] || dept.candleCount;
+            const candleCount = dept.candleCount || 0;
 
             return (
               <div

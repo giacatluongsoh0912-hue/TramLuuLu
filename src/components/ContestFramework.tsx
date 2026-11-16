@@ -29,17 +29,26 @@ import {
   Camera,
   AlertTriangle,
   Link as LinkIcon,
+  Loader2,
+  CloudUpload,
 } from 'lucide-react';
 import { audioPlayer } from '../utils/audioPlayer';
-import { compressImage, idbGet, idbSet } from '../utils/imageStorage';
+import { compressImage, formatFileSize, idbGet } from '../utils/imageStorage';
 import {
   subscribeCompetitionStats,
   syncAddFlowerScore,
+  syncUpdateFlowerStats,
   subscribeContestMoments,
   syncSaveContestMoment,
   syncDeleteContestMoment,
-  ContestMoment,
+  uploadMediaAsset,
+  INITIAL_CONTEST_MOMENTS,
+  DEFAULT_FLOWER_STATS,
+  FlowerScoreStats,
 } from '../utils/syncService';
+import { SyncedImage } from './SyncedImage';
+
+const DEFAULT_MOMENT_IMAGE = '/assets/aistudio/image_7c4a105b.png';
 
 export interface TeacherStudentMoment {
   id: string;
@@ -47,31 +56,21 @@ export interface TeacherStudentMoment {
   title: string;
   description: string;
   imageSrc: string;
+  createdAt?: number;
+  likes?: number;
+  author?: string;
 }
 
-const DEFAULT_PART2_MOMENTS: TeacherStudentMoment[] = [
-  {
-    id: 'p2-1',
-    tag: 'KHỐI 12',
-    title: 'Những Tiết Sinh Hoạt Ấm Áp Của K31',
-    description: 'Lời dặn dò ân cần trước kỳ thi đại học, những cái ôm siết chặt và sự quan tâm như của người cha, người mẹ thứ hai.',
-    imageSrc: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=800&q=80',
-  },
-  {
-    id: 'p2-2',
-    tag: 'NGOẠI KHÓA',
-    title: 'Vòng Xòe Đoàn Kết & Hội Trại Sam Si',
-    description: 'Nơi thầy trò cùng hòa chung một điệu múa xòe, đốt lên ngọn lửa trại bập bùng thắp sáng ước mơ tuổi trẻ.',
-    imageSrc: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=800&q=80',
-  },
-  {
-    id: 'p2-3',
-    tag: 'GIỜ HỌC TỐT',
-    title: 'Say Mê Từng Giờ Học Đổi Mới Sáng Tạo',
-    description: 'Các tiết thực hành STEM, dự án trải nghiệm văn học và những giờ học không khoảng cách giữa thầy và trò.',
-    imageSrc: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=800&q=80',
-  },
-];
+const DEFAULT_PART2_MOMENTS: TeacherStudentMoment[] = INITIAL_CONTEST_MOMENTS.map((m) => ({
+  id: m.id,
+  tag: m.cohort,
+  title: m.title,
+  description: m.caption,
+  imageSrc: m.imageSrc,
+  createdAt: m.createdAt,
+  likes: m.likes,
+  author: m.author,
+}));
 
 interface ContestFrameworkProps {
   onOpenComposer: () => void;
@@ -86,20 +85,20 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
   const [isPlayingPodcast, setIsPlayingPodcast] = useState(false);
   const [selectedPodcastEpisode, setSelectedPodcastEpisode] = useState(0);
 
-  // Editable Flower Competition Statistics
-  const [flowerStats, setFlowerStats] = useState(() => {
-    try {
-      const saved = localStorage.getItem('csl_flower_competition_stats');
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // fallback
-    }
-    return {
-      flower9: 1280,
-      flower10: 895,
-      participationRate: 100,
-      lastUpdated: 'Cập nhật tuần cao điểm 20/11',
-    };
+  const cloudStatsReadyRef = useRef(false);
+  const cloudMomentsReadyRef = useRef(false);
+
+  // Flower Competition Statistics (synced via Cloud Firestore + IndexedDB offline cache)
+  const [flowerStats, setFlowerStats] = useState<{
+    flower9: number;
+    flower10: number;
+    participationRate: number;
+    lastUpdated: string;
+  }>({
+    flower9: DEFAULT_FLOWER_STATS.flower9,
+    flower10: DEFAULT_FLOWER_STATS.flower10,
+    participationRate: DEFAULT_FLOWER_STATS.participationRate,
+    lastUpdated: DEFAULT_FLOWER_STATS.lastUpdated || 'Cập nhật tuần cao điểm 20/11',
   });
 
   const [isEditingStats, setIsEditingStats] = useState(false);
@@ -109,28 +108,73 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
   const [editNote, setEditNote] = useState(flowerStats.lastUpdated);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Part 2: Dynamic Teacher-Student Moments State (IndexedDB hydrated only before cloud arrives)
+  const [moments, setMoments] = useState<TeacherStudentMoment[]>(DEFAULT_PART2_MOMENTS);
+
   useEffect(() => {
-    try {
-      localStorage.setItem('csl_flower_competition_stats', JSON.stringify(flowerStats));
-    } catch {
-      // ignore
-    }
-  }, [flowerStats]);
+    let active = true;
+    idbGet<FlowerScoreStats>('csl_flower_stats')
+      .then((cached) => {
+        if (!active || cloudStatsReadyRef.current || !cached) return;
+        setFlowerStats({
+          flower9: cached.flower9 ?? DEFAULT_FLOWER_STATS.flower9,
+          flower10: cached.flower10 ?? DEFAULT_FLOWER_STATS.flower10,
+          participationRate: cached.participationRate ?? DEFAULT_FLOWER_STATS.participationRate,
+          lastUpdated: cached.lastUpdated || 'Cập nhật tuần cao điểm 20/11',
+        });
+      })
+      .catch(() => {});
+
+    idbGet<
+      Array<{
+        id: string;
+        cohort?: string;
+        title: string;
+        caption: string;
+        imageSrc: string;
+        createdAt?: number;
+        likes?: number;
+        author?: string;
+      }>
+    >('csl_contest_moments')
+      .then((cached) => {
+        if (!active || cloudMomentsReadyRef.current || !cached || cached.length === 0) return;
+        setMoments(
+          cached.map((d) => ({
+            id: d.id,
+            tag: d.cohort || 'KHỐI 12',
+            title: d.title,
+            description: d.caption,
+            imageSrc: d.imageSrc,
+            createdAt: d.createdAt,
+            likes: d.likes,
+            author: d.author,
+          }))
+        );
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Real-time synchronization for flower scores and contest moments across all visitors
   useEffect(() => {
     const unsubStats = subscribeCompetitionStats((stats) => {
+      cloudStatsReadyRef.current = true;
       if (stats) {
-        setFlowerStats((prev: typeof flowerStats) => ({
-          ...prev,
+        setFlowerStats((prev) => ({
           flower9: stats.flower9 ?? prev.flower9,
           flower10: stats.flower10 ?? prev.flower10,
           participationRate: stats.participationRate ?? prev.participationRate,
+          lastUpdated: stats.lastUpdated || prev.lastUpdated,
         }));
       }
     });
 
     const unsubMoments = subscribeContestMoments((data) => {
+      cloudMomentsReadyRef.current = true;
       if (data && data.length > 0) {
         setMoments(
           data.map((d) => ({
@@ -139,6 +183,9 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
             title: d.title,
             description: d.caption,
             imageSrc: d.imageSrc,
+            createdAt: d.createdAt,
+            likes: d.likes,
+            author: d.author,
           }))
         );
       }
@@ -156,13 +203,13 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
   };
 
   const handleAddFlower9 = (amount: number) => {
-    setFlowerStats((prev: typeof flowerStats) => ({ ...prev, flower9: prev.flower9 + amount }));
+    setFlowerStats((prev) => ({ ...prev, flower9: prev.flower9 + amount }));
     syncAddFlowerScore('flower9', amount).catch(console.error);
     showToast(`Đã thêm +${amount} Hoa Điểm 9 dâng thầy cô!`);
   };
 
   const handleAddFlower10 = (amount: number) => {
-    setFlowerStats((prev: typeof flowerStats) => ({ ...prev, flower10: prev.flower10 + amount }));
+    setFlowerStats((prev) => ({ ...prev, flower10: prev.flower10 + amount }));
     syncAddFlowerScore('flower10', amount).catch(console.error);
     showToast(`Đã thêm +${amount} Hoa Điểm 10 xuất sắc!`);
   };
@@ -175,61 +222,67 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
     setIsEditingStats(true);
   };
 
-  const handleSaveStats = (e: React.FormEvent) => {
+  const handleSaveStats = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFlowerStats({
+    const nextStats = {
       flower9: Math.max(0, Number(editFlower9) || 0),
       flower10: Math.max(0, Number(editFlower10) || 0),
       participationRate: Math.min(100, Math.max(0, Number(editRate) || 0)),
       lastUpdated: editNote.trim() || 'Vừa cập nhật hôm nay',
-    });
-    setIsEditingStats(false);
-    showToast('Đã lưu cập nhật số liệu Bảng Hoa Điểm 9 & 10!');
-  };
-
-  const handleResetDefaultStats = () => {
-    setFlowerStats({
-      flower9: 1280,
-      flower10: 895,
-      participationRate: 100,
-      lastUpdated: 'Cập nhật tuần cao điểm 20/11',
-    });
-    setIsEditingStats(false);
-    showToast('Đã khôi phục số liệu mặc định ban đầu.');
-  };
-
-  // Part 2: Dynamic Teacher-Student Moments State
-  const [moments, setMoments] = useState<TeacherStudentMoment[]>(() => {
+    };
+    setFlowerStats(nextStats);
     try {
-      const saved = localStorage.getItem('csl_contest_part2_moments');
-      if (saved) return JSON.parse(saved);
+      await syncUpdateFlowerStats(nextStats);
+      setIsEditingStats(false);
+      showToast('Đã lưu & đồng bộ số liệu Bảng Hoa Điểm 9 & 10!');
     } catch {
-      // fallback
+      showToast('Không thể đồng bộ số liệu lên đám mây. Vui lòng thử lại.');
     }
-    return DEFAULT_PART2_MOMENTS;
-  });
+  };
+
+  const handleResetDefaultStats = async () => {
+    const defaultStats = {
+      flower9: DEFAULT_FLOWER_STATS.flower9,
+      flower10: DEFAULT_FLOWER_STATS.flower10,
+      participationRate: DEFAULT_FLOWER_STATS.participationRate,
+      lastUpdated: DEFAULT_FLOWER_STATS.lastUpdated || 'Cập nhật tuần cao điểm 20/11',
+    };
+    setFlowerStats(defaultStats);
+    try {
+      await syncUpdateFlowerStats(defaultStats);
+      setIsEditingStats(false);
+      showToast('Đã khôi phục số liệu mặc định ban đầu.');
+    } catch {
+      showToast('Không thể khôi phục số liệu lên đám mây. Vui lòng thử lại.');
+    }
+  };
 
   // Modal states for Part 2 moments
   const [isAddingMoment, setIsAddingMoment] = useState(false);
   const [editingMoment, setEditingMoment] = useState<TeacherStudentMoment | null>(null);
   const [deletingMomentId, setDeletingMomentId] = useState<string | null>(null);
+  const [isUploadingMoment, setIsUploadingMoment] = useState(false);
+  const [momentUploadError, setMomentUploadError] = useState<string | null>(null);
+  const [momentSizeInfo, setMomentSizeInfo] = useState<string | null>(null);
 
   // Form states for Part 2
   const [momentTitle, setMomentTitle] = useState('');
   const [momentTag, setMomentTag] = useState('Khối 10');
   const [momentCustomTag, setMomentCustomTag] = useState('');
   const [momentDesc, setMomentDesc] = useState('');
-  const [momentImage, setMomentImage] = useState('https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=800&q=80');
+  const [momentImage, setMomentImage] = useState(DEFAULT_MOMENT_IMAGE);
   const [momentMethod, setMomentMethod] = useState<'upload' | 'url'>('upload');
   const [momentUrl, setMomentUrl] = useState('');
   const momentFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleOpenAddMoment = () => {
+    setMomentUploadError(null);
+    setMomentSizeInfo(null);
     setMomentTitle('');
     setMomentTag('Khối 10');
     setMomentCustomTag('');
     setMomentDesc('');
-    setMomentImage('https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=800&q=80');
+    setMomentImage(DEFAULT_MOMENT_IMAGE);
     setMomentMethod('upload');
     setMomentUrl('');
     setEditingMoment(null);
@@ -237,6 +290,8 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
   };
 
   const handleOpenEditMoment = (m: TeacherStudentMoment) => {
+    setMomentUploadError(null);
+    setMomentSizeInfo(null);
     setEditingMoment(m);
     setMomentTitle(m.title);
     setMomentTag(m.tag);
@@ -244,87 +299,106 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
     setMomentDesc(m.description);
     setMomentImage(m.imageSrc);
     setMomentMethod('upload');
-    setMomentUrl(m.imageSrc.startsWith('data:') ? '' : m.imageSrc);
+    setMomentUrl(m.imageSrc.startsWith('data:') || m.imageSrc.startsWith('media://') ? '' : m.imageSrc);
     setIsAddingMoment(true);
   };
 
-  const handleSaveMoment = (e: React.FormEvent) => {
+  const handleSaveMoment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!momentTitle.trim() || !momentDesc.trim()) return;
+    if (!momentTitle.trim() || !momentDesc.trim() || isUploadingMoment) return;
 
-    const finalImage = momentMethod === 'url' && momentUrl.trim() ? momentUrl.trim() : momentImage;
-    const finalTag = momentTag === 'custom' && momentCustomTag.trim() ? momentCustomTag.trim() : momentTag;
+    setIsUploadingMoment(true);
+    setMomentUploadError(null);
+    try {
+      let finalImage = momentMethod === 'url' && momentUrl.trim() ? momentUrl.trim() : momentImage;
+      if (finalImage.startsWith('data:')) {
+        finalImage = await uploadMediaAsset(finalImage);
+      }
+      const finalTag = momentTag === 'custom' && momentCustomTag.trim() ? momentCustomTag.trim() : momentTag;
 
-    if (editingMoment) {
-      const updated: TeacherStudentMoment = {
-        ...editingMoment,
-        title: momentTitle.trim(),
-        tag: finalTag,
-        description: momentDesc.trim(),
-        imageSrc: finalImage,
-      };
-      setMoments((prev) =>
-        prev.map((m) =>
-          m.id === editingMoment.id ? updated : m
-        )
+      if (editingMoment) {
+        const updated: TeacherStudentMoment = {
+          ...editingMoment,
+          title: momentTitle.trim(),
+          tag: finalTag,
+          description: momentDesc.trim(),
+          imageSrc: finalImage,
+        };
+        await syncSaveContestMoment({
+          id: updated.id,
+          title: updated.title,
+          cohort: updated.tag,
+          caption: updated.description,
+          imageSrc: updated.imageSrc,
+          likes: editingMoment.likes ?? 100,
+          author: editingMoment.author || 'Chuyên Sơn La',
+          createdAt: editingMoment.createdAt ?? Date.now(),
+        });
+        setMoments((prev) => prev.map((m) => (m.id === editingMoment.id ? updated : m)));
+        showToast('Đã cập nhật & đồng bộ khoảnh khắc thành công!');
+      } else {
+        const createdAt = Date.now();
+        const newM: TeacherStudentMoment = {
+          id: 'p2-' + createdAt,
+          tag: finalTag,
+          title: momentTitle.trim(),
+          description: momentDesc.trim(),
+          imageSrc: finalImage,
+          createdAt,
+          likes: 0,
+          author: 'Chuyên Sơn La',
+        };
+        await syncSaveContestMoment({
+          id: newM.id,
+          title: newM.title,
+          cohort: newM.tag,
+          caption: newM.description,
+          imageSrc: newM.imageSrc,
+          likes: 0,
+          author: 'Chuyên Sơn La',
+          createdAt,
+        });
+        setMoments((prev) => [newM, ...prev]);
+        showToast('Đã đăng & đồng bộ khoảnh khắc mới thành công!');
+      }
+      setIsAddingMoment(false);
+      setEditingMoment(null);
+      setMomentSizeInfo(null);
+    } catch (err) {
+      setMomentUploadError(
+        err instanceof Error ? err.message : 'Không thể đồng bộ ảnh lên đám mây. Vui lòng thử lại.'
       );
-      syncSaveContestMoment({
-        id: updated.id,
-        title: updated.title,
-        cohort: updated.tag,
-        caption: updated.description,
-        imageSrc: updated.imageSrc,
-        likes: 100,
-        author: 'Chuyên Sơn La',
-        createdAt: Date.now(),
-      }).catch(console.error);
-      showToast('Đã cập nhật khoảnh khắc thành công!');
-    } else {
-      const newM: TeacherStudentMoment = {
-        id: 'p2-' + Date.now(),
-        tag: finalTag,
-        title: momentTitle.trim(),
-        description: momentDesc.trim(),
-        imageSrc: finalImage,
-      };
-      setMoments((prev) => [newM, ...prev]);
-      syncSaveContestMoment({
-        id: newM.id,
-        title: newM.title,
-        cohort: newM.tag,
-        caption: newM.description,
-        imageSrc: newM.imageSrc,
-        likes: 0,
-        author: 'Chuyên Sơn La',
-        createdAt: Date.now(),
-      }).catch(console.error);
-      showToast('Đã đăng khoảnh khắc mới thành công!');
+    } finally {
+      setIsUploadingMoment(false);
     }
-    setIsAddingMoment(false);
-    setEditingMoment(null);
   };
 
-  const handleDeleteMoment = (id: string) => {
+  const handleDeleteMoment = async (id: string) => {
+    const previous = moments;
     setMoments((prev) => prev.filter((m) => m.id !== id));
-    syncDeleteContestMoment(id).catch(console.error);
     setDeletingMomentId(null);
-    showToast('Đã xóa khoảnh khắc!');
+    try {
+      await syncDeleteContestMoment(id);
+      showToast('Đã xóa khoảnh khắc!');
+    } catch {
+      setMoments(previous);
+      showToast('Không thể xóa khoảnh khắc trên đám mây. Vui lòng thử lại.');
+    }
   };
 
   const handleMomentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setMomentUploadError(null);
     try {
-      const compressed = await compressImage(file, 900, 900, 0.82);
+      const compressed = await compressImage(file, 1600, 1600, 0.88);
+      const approxBytes = Math.round((compressed.length * 3) / 4);
+      setMomentSizeInfo(
+        `Ảnh gốc ${formatFileSize(file.size)} → Tối ưu chất lượng cao ${formatFileSize(approxBytes)}`
+      );
       setMomentImage(compressed);
     } catch {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setMomentImage(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
+      setMomentUploadError('Không thể đọc tệp ảnh này. Vui lòng thử lại với định dạng JPG/PNG.');
     }
   };
 
@@ -592,13 +666,11 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
                     >
                       <div>
                         <div className="aspect-4/3 rounded-lg overflow-hidden bg-[#101a13] mb-3 relative">
-                          <img
+                          <SyncedImage
                             src={m.imageSrc}
+                            fallbackSrc={DEFAULT_MOMENT_IMAGE}
                             alt={m.title}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = '/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png';
-                            }}
                           />
                           {/* Quick action buttons on photo */}
                           <div className="absolute top-2 right-2 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity z-10">
@@ -1169,24 +1241,34 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
             </div>
 
             <form onSubmit={handleSaveMoment} className="space-y-4">
+              {momentUploadError && (
+                <div className="p-2.5 rounded-lg bg-rose-950/70 border border-rose-500/40 text-xs text-rose-200">
+                  {momentUploadError}
+                </div>
+              )}
+
               {/* Photo Preview & Method */}
               <div>
                 <label className="block text-xs font-semibold text-[#ded5c0] mb-1.5">
                   Hình ảnh khoảnh khắc:
                 </label>
                 <div className="relative aspect-video rounded-xl overflow-hidden bg-[#101b13] border-2 border-[#375a40] flex items-center justify-center mb-3">
-                  <img
+                  <SyncedImage
                     src={momentMethod === 'url' && momentUrl ? momentUrl : momentImage}
+                    fallbackSrc={DEFAULT_MOMENT_IMAGE}
                     alt="Xem trước hình ảnh"
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/assets/aistudio/Tr_m_k_t_n_i_s___1__108e2677.png';
-                    }}
                   />
                   <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-xs px-2.5 py-1 rounded text-[11px] text-[#eccb76]">
                     Xem trước trực tiếp
                   </div>
                 </div>
+                {momentSizeInfo && (
+                  <p className="text-[11px] text-emerald-300 mb-2 flex items-center gap-1">
+                    <CloudUpload className="w-3.5 h-3.5" />
+                    <span>{momentSizeInfo}</span>
+                  </p>
+                )}
 
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   <button
@@ -1325,10 +1407,20 @@ export const ContestFramework: React.FC<ContestFrameworkProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
+                  disabled={isUploadingMoment}
+                  className="px-5 py-2.5 text-xs font-bold text-[#1a160f] bg-[#e4c77d] hover:bg-[#ebd79b] disabled:opacity-60 rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
                 >
-                  <Check className="w-4 h-4" />
-                  <span>{editingMoment ? 'Cập nhật khoảnh khắc' : 'Đăng khoảnh khắc'}</span>
+                  {isUploadingMoment ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Đang tải ảnh lên...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>{editingMoment ? 'Cập nhật khoảnh khắc' : 'Đăng khoảnh khắc'}</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

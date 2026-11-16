@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { Feather, Heart, Search, Sparkles, Filter, X, Edit2, Trash2, Check, Save } from 'lucide-react';
 import { TributeMessage, filterTributes, formatTributeDate, validateTributeMessage } from '../utils/tributeRules';
+import { mergeLikeCount } from '../utils/syncHelpers';
 
 interface GuestbookSectionProps {
   tributes: TributeMessage[];
-  onAddTribute: (tribute: TributeMessage) => void;
-  onUpdateTribute?: (tribute: TributeMessage) => void;
-  onDeleteTribute?: (id: string) => void;
+  onAddTribute: (tribute: TributeMessage) => Promise<void> | void;
+  onUpdateTribute?: (tribute: TributeMessage) => Promise<void> | void;
+  onLikeTribute?: (tribute: TributeMessage) => Promise<void> | void;
+  onDeleteTribute?: (id: string) => Promise<void> | void;
   isComposerOpen: boolean;
   onCloseComposer: () => void;
   onOpenComposer: () => void;
@@ -17,6 +19,7 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
   tributes,
   onAddTribute,
   onUpdateTribute,
+  onLikeTribute,
   onDeleteTribute,
   isComposerOpen,
   onCloseComposer,
@@ -126,10 +129,17 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
   });
 
   const handleLike = (id: string, initialLikes: number) => {
-    setLikesState((prev) => {
-      const current = prev[id] !== undefined ? prev[id] : initialLikes;
-      return { ...prev, [id]: current + 1 };
-    });
+    const trib = tributes.find((t) => t.id === id);
+    const current = mergeLikeCount(likesState[id], trib?.likes ?? initialLikes);
+    const nextLikes = current + 1;
+    setLikesState((prev) => ({ ...prev, [id]: nextLikes }));
+    if (trib) {
+      if (onLikeTribute) {
+        onLikeTribute(trib);
+      } else if (onUpdateTribute) {
+        onUpdateTribute({ ...trib, likes: nextLikes });
+      }
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -288,7 +298,7 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
             {filtered.map((item) => {
-              const likes = likesState[item.id] !== undefined ? likesState[item.id] : item.likes;
+              const likes = mergeLikeCount(likesState[item.id], item.likes);
               const themeCls = getThemeStyle(item.paperTheme);
 
               return (

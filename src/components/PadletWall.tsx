@@ -16,18 +16,21 @@ import {
   Save,
 } from 'lucide-react';
 import { PadletNote, validatePadletNote, filterPadletNotes } from '../utils/tributeRules';
+import { mergeLikeCount } from '../utils/syncHelpers';
 
 interface PadletWallProps {
   notes: PadletNote[];
-  onAddNote: (note: PadletNote) => void;
-  onUpdateNote?: (note: PadletNote) => void;
-  onDeleteNote?: (id: string) => void;
+  onAddNote: (note: PadletNote) => Promise<void> | void;
+  onUpdateNote?: (note: PadletNote) => Promise<void> | void;
+  onLikeNote?: (note: PadletNote) => Promise<void> | void;
+  onDeleteNote?: (id: string) => Promise<void> | void;
 }
 
 export const PadletWall: React.FC<PadletWallProps> = ({
   notes,
   onAddNote,
   onUpdateNote,
+  onLikeNote,
   onDeleteNote,
 }) => {
   const [selectedTag, setSelectedTag] = useState<string>('all');
@@ -110,10 +113,17 @@ export const PadletWall: React.FC<PadletWallProps> = ({
   });
 
   const handleToggleLike = (id: string, initialLikes: number) => {
-    setLikesState((prev) => {
-      const current = prev[id] !== undefined ? prev[id] : initialLikes;
-      return { ...prev, [id]: current + 1 };
-    });
+    const note = notes.find((n) => n.id === id);
+    const current = mergeLikeCount(likesState[id], note?.likes ?? initialLikes);
+    const nextLikes = current + 1;
+    setLikesState((prev) => ({ ...prev, [id]: nextLikes }));
+    if (note) {
+      if (onLikeNote) {
+        onLikeNote(note);
+      } else if (onUpdateNote) {
+        onUpdateNote({ ...note, likes: nextLikes });
+      }
+    }
   };
 
   const handleSubmitNote = (e: React.FormEvent) => {
@@ -302,7 +312,7 @@ export const PadletWall: React.FC<PadletWallProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredNotes.map((note, index) => {
                 const rot = index % 4 === 0 ? '-rotate-1.5' : index % 4 === 1 ? 'rotate-1' : index % 4 === 2 ? '-rotate-0.5' : 'rotate-2';
-                const likes = likesState[note.id] !== undefined ? likesState[note.id] : note.likes;
+                const likes = mergeLikeCount(likesState[note.id], note.likes);
                 const colorClasses = getColorClasses(note.color);
                 const pinColor = getPinColor(note.color);
 

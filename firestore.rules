@@ -7,74 +7,183 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128;
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Memories collection
+    function isValidMemory(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 300
+        && data.imageSrc is string && data.imageSrc.size() > 0 && data.imageSrc.size() <= 1000000
+        && (!('caption' in data) || (data.caption is string && data.caption.size() <= 3000))
+        && (!('author' in data) || (data.author is string && data.author.size() <= 200))
+        && (!('year' in data) || (data.year is string && data.year.size() <= 100))
+        && (!('category' in data) || data.category in ['classroom', 'flower', 'olympiad', 'graduation'])
+        && (!('likes' in data) || data.likes is number);
+    }
+
+    function isValidTeacher(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.department is string && data.department.size() > 0 && data.department.size() <= 100
+        && (!('departmentName' in data) || (data.departmentName is string && data.departmentName.size() <= 200))
+        && (!('role' in data) || (data.role is string && data.role.size() <= 300))
+        && (!('avatar' in data) || (data.avatar is string && data.avatar.size() <= 1000000))
+        && (!('quote' in data) || (data.quote is string && data.quote.size() <= 2000))
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 5000))
+        && (!('yearsOfService' in data) || (data.yearsOfService is string && data.yearsOfService.size() <= 100))
+        && (!('likes' in data) || data.likes is number);
+    }
+
+    function isValidLeadership(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 300
+        && (!('roleType' in data) || data.roleType in ['principal', 'vice_principal'])
+        && (!('period' in data) || (data.period is string && data.period.size() <= 150))
+        && (!('milestoneTitle' in data) || (data.milestoneTitle is string && data.milestoneTitle.size() <= 300))
+        && (!('contributions' in data) || (data.contributions is string && data.contributions.size() <= 4000))
+        && (!('quote' in data) || (data.quote is string && data.quote.size() <= 2000))
+        && (!('avatar' in data) || (data.avatar is string && data.avatar.size() <= 1000000));
+    }
+
+    function isValidDepartment(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.teacherCount is number
+        && (!('candleCount' in data) || data.candleCount is number)
+        && (!('headTeacher' in data) || (data.headTeacher is string && data.headTeacher.size() <= 300));
+    }
+
+    function isValidContestMoment(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 300
+        && data.imageSrc is string && data.imageSrc.size() > 0 && data.imageSrc.size() <= 1000000
+        && (!('caption' in data) || (data.caption is string && data.caption.size() <= 3000))
+        && (!('cohort' in data) || (data.cohort is string && data.cohort.size() <= 150));
+    }
+
+    function isValidTribute(data) {
+      return data.senderName is string && data.senderName.size() > 0 && data.senderName.size() <= 200
+        && data.content is string && data.content.size() > 0 && data.content.size() <= 10000
+        && (!('recipient' in data) || (data.recipient is string && data.recipient.size() <= 300))
+        && (!('affiliation' in data) || (data.affiliation is string && data.affiliation.size() <= 300))
+        && (!('likes' in data) || data.likes is number);
+    }
+
+    function isValidPadletNote(data) {
+      return data.author is string && data.author.size() > 0 && data.author.size() <= 200
+        && data.content is string && data.content.size() > 0 && data.content.size() <= 2000
+        && (!('color' in data) || data.color in ['yellow', 'pink', 'cyan', 'purple', 'orange'])
+        && (!('likes' in data) || data.likes is number);
+    }
+
+    function isValidFlowerStats(data) {
+      return data.flower9 is number && data.flower9 >= 0
+        && data.flower10 is number && data.flower10 >= 0
+        && (!('participationRate' in data) || (data.participationRate is number && data.participationRate >= 0 && data.participationRate <= 100))
+        && (!('lastUpdated' in data) || (data.lastUpdated is string && data.lastUpdated.size() <= 200));
+    }
+
+    function isValidFilmFrame(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.label is string && data.label.size() > 0 && data.label.size() <= 200
+        && data.imageSrc is string && data.imageSrc.size() > 0 && data.imageSrc.size() <= 1000000
+        && data.order is number && data.order >= 1 && data.order <= 20
+        && (!('alt' in data) || (data.alt is string && data.alt.size() <= 200))
+        && (!('objectPosition' in data) || (data.objectPosition is string && data.objectPosition.size() <= 60));
+    }
+
+    // Memories collection (shared public commemorative wall)
     match /memories/{memoryId} {
-      allow read: if isValidId(memoryId);
-      allow create, update: if isValidId(memoryId)
-        && request.resource.data.title is string
-        && request.resource.data.title.size() <= 300
-        && request.resource.data.imageSrc is string
-        && request.resource.data.imageSrc.size() <= 1000000;
+      allow get: if isValidId(memoryId);
+      allow list: if true;
+      allow create, update: if isValidId(memoryId) && isValidMemory(request.resource.data);
       allow delete: if isValidId(memoryId);
     }
 
     // Teachers collection
     match /teachers/{teacherId} {
-      allow read: if isValidId(teacherId);
-      allow create, update: if isValidId(teacherId)
-        && request.resource.data.name is string
-        && request.resource.data.name.size() <= 200
-        && request.resource.data.department is string;
+      allow get: if isValidId(teacherId);
+      allow list: if true;
+      allow create, update: if isValidId(teacherId) && isValidTeacher(request.resource.data);
       allow delete: if isValidId(teacherId);
+    }
+
+    // Leadership Timeline collection
+    match /leadership/{leadId} {
+      allow get: if isValidId(leadId);
+      allow list: if true;
+      allow create, update: if isValidId(leadId) && isValidLeadership(request.resource.data);
+      allow delete: if isValidId(leadId);
     }
 
     // Departments collection
     match /departments/{departmentId} {
-      allow read: if isValidId(departmentId);
-      allow create, update: if isValidId(departmentId)
-        && request.resource.data.name is string
-        && request.resource.data.teacherCount is number;
+      allow get: if isValidId(departmentId);
+      allow list: if true;
+      allow create, update: if isValidId(departmentId) && isValidDepartment(request.resource.data);
       allow delete: if false;
     }
 
     // Contest Moments collection
     match /contest_moments/{momentId} {
-      allow read: if isValidId(momentId);
-      allow create, update: if isValidId(momentId)
-        && request.resource.data.title is string
-        && request.resource.data.imageSrc is string
-        && request.resource.data.imageSrc.size() <= 1000000;
+      allow get: if isValidId(momentId);
+      allow list: if true;
+      allow create, update: if isValidId(momentId) && isValidContestMoment(request.resource.data);
       allow delete: if isValidId(momentId);
     }
 
     // Tributes collection (letters to teachers)
     match /tributes/{tributeId} {
-      allow read: if isValidId(tributeId);
-      allow create, update: if isValidId(tributeId)
-        && request.resource.data.senderName is string
-        && request.resource.data.content is string
-        && request.resource.data.content.size() <= 10000;
+      allow get: if isValidId(tributeId);
+      allow list: if true;
+      allow create, update: if isValidId(tributeId) && isValidTribute(request.resource.data);
       allow delete: if isValidId(tributeId);
     }
 
     // Padlet Notes collection
     match /padlet_notes/{noteId} {
-      allow read: if isValidId(noteId);
-      allow create, update: if isValidId(noteId)
-        && request.resource.data.author is string
-        && request.resource.data.content is string;
+      allow get: if isValidId(noteId);
+      allow list: if true;
+      allow create, update: if isValidId(noteId) && isValidPadletNote(request.resource.data);
       allow delete: if isValidId(noteId);
     }
 
     // Competition Stats collection
     match /competition_stats/{statId} {
-      allow read: if isValidId(statId);
-      allow create, update: if isValidId(statId)
-        && request.resource.data.flower9 is number
-        && request.resource.data.flower10 is number;
+      allow get: if isValidId(statId);
+      allow list: if true;
+      allow create, update: if isValidId(statId) && isValidFlowerStats(request.resource.data);
+      allow delete: if false;
+    }
+
+    // Chunked Media Assets (manifest + chunks for larger uploaded images)
+    match /media_assets/{mediaId} {
+      allow get: if isValidId(mediaId);
+      allow list: if true;
+      allow create, update: if isValidId(mediaId)
+        && request.resource.data.id is string
+        && request.resource.data.id.size() <= 128
+        && request.resource.data.totalChunks is number
+        && request.resource.data.totalChunks > 0
+        && request.resource.data.totalChunks <= 20;
+      allow delete: if isValidId(mediaId);
+    }
+
+    match /media_chunks/{chunkId} {
+      allow get: if isValidId(chunkId);
+      allow list: if true;
+      allow create, update: if isValidId(chunkId)
+        && request.resource.data.mediaId is string
+        && request.resource.data.mediaId.size() <= 128
+        && request.resource.data.index is number
+        && request.resource.data.index >= 0
+        && request.resource.data.index < 20
+        && request.resource.data.data is string
+        && request.resource.data.data.size() <= 600000;
+      allow delete: if isValidId(chunkId);
+    }
+
+    // Cinematic Film Reel Frames (editable 4-frame showcase)
+    match /film_frames/{frameId} {
+      allow get: if isValidId(frameId);
+      allow list: if true;
+      allow create, update: if isValidId(frameId) && isValidFilmFrame(request.resource.data);
       allow delete: if false;
     }
   }
