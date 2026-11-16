@@ -17,7 +17,10 @@ service cloud.firestore {
         && (!('author' in data) || (data.author is string && data.author.size() <= 200))
         && (!('year' in data) || (data.year is string && data.year.size() <= 100))
         && (!('category' in data) || data.category in ['classroom', 'flower', 'olympiad', 'graduation'])
-        && (!('likes' in data) || data.likes is number);
+        && (!('likes' in data) || data.likes is number)
+        && (!('source' in data) || data.source in ['manual', 'facebook'])
+        && (!('sourceUrl' in data) || (data.sourceUrl is string && data.sourceUrl.size() <= 500))
+        && (!('externalId' in data) || (data.externalId is string && data.externalId.size() <= 128));
     }
 
     function isValidTeacher(data) {
@@ -86,6 +89,21 @@ service cloud.firestore {
         && data.order is number && data.order >= 1 && data.order <= 20
         && (!('alt' in data) || (data.alt is string && data.alt.size() <= 200))
         && (!('objectPosition' in data) || (data.objectPosition is string && data.objectPosition.size() <= 60));
+    }
+
+    function isValidFacebookSyncState(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.pageUrl is string && data.pageUrl.size() > 0 && data.pageUrl.size() <= 500
+        && data.autoSyncEnabled is bool
+        && (!('pageName' in data) || (data.pageName is string && data.pageName.size() <= 200))
+        && (!('followerCount' in data) || (data.followerCount is string && data.followerCount.size() <= 50))
+        && (!('lastSyncAt' in data) || data.lastSyncAt is number)
+        && (!('syncedCount' in data) || data.syncedCount is number)
+        && (!('dismissedIds' in data) || (
+          data.dismissedIds is list &&
+          data.dismissedIds.size() <= 200 &&
+          (data.dismissedIds.size() == 0 || data.dismissedIds[0] is string)
+        ));
     }
 
     // Memories collection (shared public commemorative wall)
@@ -184,6 +202,14 @@ service cloud.firestore {
       allow get: if isValidId(frameId);
       allow list: if true;
       allow create, update: if isValidId(frameId) && isValidFilmFrame(request.resource.data);
+      allow delete: if false;
+    }
+
+    // Facebook Fanpage Sync configuration & dismissed ID tracking
+    match /facebook_sync/{syncId} {
+      allow get: if isValidId(syncId);
+      allow list: if true;
+      allow create, update: if isValidId(syncId) && isValidFacebookSyncState(request.resource.data);
       allow delete: if false;
     }
   }

@@ -10,6 +10,9 @@ export interface MemoryPhoto {
   imageSrc: string;
   tags: string[];
   likes: number;
+  source?: 'manual' | 'facebook';
+  sourceUrl?: string;
+  externalId?: string;
   createdAt?: number;
   updatedAt?: number;
 }

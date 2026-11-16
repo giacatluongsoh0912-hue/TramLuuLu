@@ -50,6 +50,12 @@ import {
   syncDeleteTribute,
   syncIncrementDepartmentCandle,
   syncIncrementDocumentLikes,
+  subscribeFacebookSyncState,
+  syncSaveFacebookSyncState,
+  syncRecordDismissedFacebookId,
+  syncFacebookPostsToCloud,
+  DEFAULT_FACEBOOK_SYNC_STATE,
+  type FacebookSyncState,
 } from './utils/syncService';
 
 export default function App() {
@@ -59,6 +65,9 @@ export default function App() {
   const [leadership, setLeadership] = useState<LeadershipMilestone[]>(LEADERSHIP_TIMELINE_DATA);
   const [padletNotes, setPadletNotes] = useState<PadletNote[]>(INITIAL_PADLET_NOTES);
   const [departments, setDepartments] = useState<DepartmentFaculty[]>(INITIAL_DEPARTMENTS);
+  const [fbSyncState, setFbSyncState] = useState<FacebookSyncState>(DEFAULT_FACEBOOK_SYNC_STATE);
+  const [isFbSyncing, setIsFbSyncing] = useState(false);
+  const [fbSyncNotice, setFbSyncNotice] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
 
   const [petalsEnabled, setPetalsEnabled] = useState(true);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
@@ -76,7 +85,19 @@ export default function App() {
     departments: false,
     padletNotes: false,
     tributes: false,
+    fbSync: false,
   });
+  const autoSyncedOnLoadRef = useRef(false);
+  const memoriesRef = useRef<MemoryPhoto[]>(INITIAL_MEMORIES);
+  const fbSyncStateRef = useRef<FacebookSyncState>(DEFAULT_FACEBOOK_SYNC_STATE);
+
+  useEffect(() => {
+    memoriesRef.current = memories;
+  }, [memories]);
+
+  useEffect(() => {
+    fbSyncStateRef.current = fbSyncState;
+  }, [fbSyncState]);
 
   // Auto-open cinematic prologue on first launch for emotional impression
   useEffect(() => {
@@ -144,6 +165,10 @@ export default function App() {
       cloudSyncedRef.current.tributes = true;
       if (data && data.length > 0) setTributes(data);
     });
+    const unsubFbSync = subscribeFacebookSyncState((state) => {
+      cloudSyncedRef.current.fbSync = true;
+      setFbSyncState(state);
+    });
 
     return () => {
       unsubMemories();
@@ -152,8 +177,82 @@ export default function App() {
       unsubDepts();
       unsubNotes();
       unsubTributes();
+      unsubFbSync();
     };
   }, []);
+
+  const runFacebookSync = async (options?: {
+    pageUrl?: string;
+    includeDismissed?: boolean;
+    forceRefresh?: boolean;
+    silentIfNoNew?: boolean;
+  }) => {
+    if (isFbSyncing) return;
+    setIsFbSyncing(true);
+    if (!options?.silentIfNoNew) {
+      setFbSyncNotice(null);
+    }
+    try {
+      const currentState = fbSyncStateRef.current;
+      const result = await syncFacebookPostsToCloud({
+        pageUrl: options?.pageUrl || currentState.pageUrl,
+        existingMemories: memoriesRef.current,
+        dismissedIds: currentState.dismissedIds || [],
+        includeDismissed: options?.includeDismissed,
+        forceRefresh: options?.forceRefresh,
+      });
+
+      if (result.addedCount > 0) {
+        setFbSyncNotice({
+          type: 'success',
+          text: `Đã tự động cập nhật ${result.addedCount} bài viết mới từ Fanpage ${result.pageName}!`,
+        });
+      } else if (!options?.silentIfNoNew) {
+        setFbSyncNotice({
+          type: 'info',
+          text: `Đã kiểm tra ${result.totalFetched} bài viết gần nhất trên Fanpage — Album đã ở trạng thái mới nhất.`,
+        });
+      }
+    } catch (err) {
+      if (!options?.silentIfNoNew) {
+        setFbSyncNotice({
+          type: 'error',
+          text:
+            err instanceof Error
+              ? err.message
+              : 'Không thể tải bài viết mới từ Facebook lúc này.',
+        });
+      }
+    } finally {
+      setIsFbSyncing(false);
+    }
+  };
+
+  // Auto-sync school Facebook Fanpage once Cloud Firestore snapshots settle + every 10 minutes
+  useEffect(() => {
+    const AUTO_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
+    const maybeAutoSync = () => {
+      if (!cloudSyncedRef.current.memories || !cloudSyncedRef.current.fbSync) return;
+      const state = fbSyncStateRef.current;
+      if (!state.autoSyncEnabled) return;
+      const elapsed = Date.now() - (state.lastSyncAt || 0);
+      if (elapsed >= AUTO_SYNC_COOLDOWN_MS) {
+        void runFacebookSync({ silentIfNoNew: true });
+      }
+    };
+
+    if (
+      !autoSyncedOnLoadRef.current &&
+      cloudSyncedRef.current.memories &&
+      cloudSyncedRef.current.fbSync
+    ) {
+      autoSyncedOnLoadRef.current = true;
+      maybeAutoSync();
+    }
+
+    const timer = window.setInterval(maybeAutoSync, 10 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [memories.length, fbSyncState.lastSyncAt, fbSyncState.autoSyncEnabled]);
 
   const handleAddMemory = async (newMem: MemoryPhoto) => {
     setMemories((prev) => [newMem, ...prev]);
@@ -194,6 +293,9 @@ export default function App() {
     });
     try {
       await syncDeleteMemory(id);
+      if (id.startsWith('fb-')) {
+        await syncRecordDismissedFacebookId(id);
+      }
     } catch (err) {
       if (previous) setMemories(previous);
       throw err;
@@ -440,7 +542,7 @@ export default function App() {
           onOpenQRCode={() => setIsQRCodeOpen(true)}
         />
 
-        {/* Section 1: Memory Scrapbook & Timeline ("Lật Giở Ký Ức") - With Photo Editing */}
+        {/* Section 1: Memory Scrapbook & Timeline ("Lật Giở Ký Ức") - With Photo Editing & Facebook Sync */}
         <MemoryScrapbook
           memories={memories}
           onAddMemory={handleAddMemory}
@@ -448,6 +550,18 @@ export default function App() {
           onLikeMemory={handleLikeMemory}
           onDeleteMemory={handleDeleteMemory}
           onSelectMemory={(m) => setSelectedPhoto(m)}
+          fbSyncState={fbSyncState}
+          isFbSyncing={isFbSyncing}
+          fbSyncNotice={fbSyncNotice}
+          onDismissFbNotice={() => setFbSyncNotice(null)}
+          onSyncFacebook={(options) => runFacebookSync(options)}
+          onToggleFbAutoSync={async (enabled) => {
+            await syncSaveFacebookSyncState({ autoSyncEnabled: enabled });
+          }}
+          onUpdateFbPageUrl={async (pageUrl) => {
+            await syncSaveFacebookSyncState({ pageUrl });
+            await runFacebookSync({ pageUrl, forceRefresh: true });
+          }}
         />
 
         {/* Section 2: Dedicated Teacher Tribute Gallery with Photos & Bios ("Tri Ân Thầy Cô") */}

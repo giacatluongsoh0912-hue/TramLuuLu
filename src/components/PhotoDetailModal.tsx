@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Sparkles, MapPin, Calendar } from 'lucide-react';
+import { X, Sparkles, MapPin, Calendar, ExternalLink, Globe } from 'lucide-react';
 import { MemoryPhoto } from '../data/memoriesData';
 import { SyncedImage } from './SyncedImage';
 
@@ -95,6 +95,19 @@ export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
                 <Sparkles className="w-4 h-4" />
                 <span>Viết lưu bút cho khoảnh khắc này</span>
               </button>
+
+              {(memory.source === 'facebook' || memory.id.startsWith('fb-')) && (
+                <a
+                  href={memory.sourceUrl || 'https://www.facebook.com/chuyensonlaofficial'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="py-3 px-4 rounded-lg bg-[#183047] hover:bg-[#1e3d5a] text-[#cde6ff] text-xs font-semibold transition-colors cursor-pointer border border-[#326493] flex items-center gap-1.5"
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>Fanpage</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
 
               <button
                 onClick={onClose}

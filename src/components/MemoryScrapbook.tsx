@@ -13,10 +13,15 @@ import {
   Trash2,
   Loader2,
   CloudUpload,
+  RefreshCw,
+  Globe,
+  Settings2,
+  ExternalLink,
+  RotateCcw,
 } from 'lucide-react';
 import { MemoryPhoto } from '../data/memoriesData';
 import { compressImage, formatFileSize } from '../utils/imageStorage';
-import { uploadMediaAsset } from '../utils/syncService';
+import { uploadMediaAsset, type FacebookSyncState } from '../utils/syncService';
 import { mergeLikeCount } from '../utils/syncHelpers';
 import { SyncedImage } from './SyncedImage';
 
@@ -29,6 +34,17 @@ interface MemoryScrapbookProps {
   onLikeMemory?: (memory: MemoryPhoto) => Promise<void> | void;
   onDeleteMemory?: (id: string) => Promise<void> | void;
   onSelectMemory: (memory: MemoryPhoto) => void;
+  fbSyncState?: FacebookSyncState;
+  isFbSyncing?: boolean;
+  fbSyncNotice?: { type: 'success' | 'info' | 'error'; text: string } | null;
+  onDismissFbNotice?: () => void;
+  onSyncFacebook?: (options?: {
+    pageUrl?: string;
+    includeDismissed?: boolean;
+    forceRefresh?: boolean;
+  }) => Promise<void> | void;
+  onToggleFbAutoSync?: (enabled: boolean) => Promise<void> | void;
+  onUpdateFbPageUrl?: (pageUrl: string) => Promise<void> | void;
 }
 
 export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
@@ -38,8 +54,19 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
   onLikeMemory,
   onDeleteMemory,
   onSelectMemory,
+  fbSyncState,
+  isFbSyncing = false,
+  fbSyncNotice,
+  onDismissFbNotice,
+  onSyncFacebook,
+  onToggleFbAutoSync,
+  onUpdateFbPageUrl,
 }) => {
-  const [filter, setFilter] = useState<'all' | 'classroom' | 'flower' | 'olympiad' | 'graduation'>('all');
+  const [filter, setFilter] = useState<'all' | 'facebook' | 'classroom' | 'flower' | 'olympiad' | 'graduation'>('all');
+  const [showFbSettings, setShowFbSettings] = useState(false);
+  const [fbPageInput, setFbPageInput] = useState(
+    fbSyncState?.pageUrl || 'https://www.facebook.com/chuyensonlaofficial'
+  );
   const [likesState, setLikesState] = useState<Record<string, number>>({});
   const [isAdding, setIsAdding] = useState(false);
   const [editingMemory, setEditingMemory] = useState<MemoryPhoto | null>(null);
@@ -68,10 +95,23 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
+  const fbMemoriesCount = memories.filter(
+    (m) => m.source === 'facebook' || m.id.startsWith('fb-')
+  ).length;
+
   const filteredMemories = memories.filter((m) => {
     if (filter === 'all') return true;
+    if (filter === 'facebook') return m.source === 'facebook' || m.id.startsWith('fb-');
     return m.category === filter;
   });
+
+  const formatLastSyncTime = (ts?: number) => {
+    if (!ts) return 'Chưa đồng bộ';
+    const d = new Date(ts);
+    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) +
+      ' · ' +
+      d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+  };
 
   const handleToggleLike = (id: string, initialLikes: number) => {
     const mem = memories.find((m) => m.id === id);
@@ -170,7 +210,7 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
         id: 'mem-' + now,
         title: title.trim(),
         year: year.trim(),
-        category: filter === 'all' ? 'classroom' : filter,
+        category: filter === 'all' || filter === 'facebook' ? 'classroom' : filter,
         caption: caption.trim(),
         author: author.trim(),
         imageSrc: finalImage,
@@ -214,7 +254,20 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {onSyncFacebook && (
+              <button
+                type="button"
+                onClick={() => onSyncFacebook({ forceRefresh: true })}
+                disabled={isFbSyncing}
+                className="px-4 py-2.5 rounded-lg bg-[#183047] hover:bg-[#1e3d5a] disabled:opacity-70 text-[#e8f2ff] text-xs font-semibold border border-[#326493] transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                title="Kiểm tra và tải ngay các bài viết mới nhất từ Fanpage Facebook trường"
+              >
+                <RefreshCw className={`w-4 h-4 text-[#7cc4ff] ${isFbSyncing ? 'animate-spin' : ''}`} />
+                <span>{isFbSyncing ? 'Đang cập nhật Facebook...' : 'Cập nhật từ Facebook'}</span>
+              </button>
+            )}
+
             <button
               onClick={() => {
                 setUploadError(null);
@@ -229,6 +282,122 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
           </div>
         </div>
 
+        {/* Facebook Auto-Sync Status Banner */}
+        {fbSyncState && (
+          <div className="mb-6 rounded-xl bg-[#122017]/90 border border-[#2a4332] px-4 py-3 text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex flex-wrap items-center gap-2 text-[#d6cdb7]">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#1877F2]/20 border border-[#1877F2]/40 text-[#8ec5ff] font-semibold">
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>{fbSyncState.autoSyncEnabled ? 'Tự động đồng bộ Fanpage' : 'Đồng bộ thủ công'}</span>
+                </span>
+                <a
+                  href={fbSyncState.pageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-white hover:text-[#eccb76] inline-flex items-center gap-1 transition-colors"
+                >
+                  <span>{fbSyncState.pageName || 'Trường THPT Chuyên Sơn La'}</span>
+                  <ExternalLink className="w-3 h-3 opacity-75" />
+                </a>
+                {fbSyncState.followerCount && (
+                  <span className="text-[11px] text-[#9fb3a5]">
+                    · {fbSyncState.followerCount} theo dõi
+                  </span>
+                )}
+                <span className="text-[11px] text-[#9fb3a5]">
+                  · Cập nhật gần nhất: {formatLastSyncTime(fbSyncState.lastSyncAt)}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {onToggleFbAutoSync && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleFbAutoSync(!fbSyncState.autoSyncEnabled)}
+                    className={`px-2.5 py-1 rounded-md border text-[11px] font-medium cursor-pointer transition-colors ${
+                      fbSyncState.autoSyncEnabled
+                        ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                        : 'bg-[#1a2b20] border-[#334f3c] text-[#b6ab93]'
+                    }`}
+                  >
+                    {fbSyncState.autoSyncEnabled ? '● Tự động bật' : '○ Đang tắt'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFbPageInput(fbSyncState.pageUrl);
+                    setShowFbSettings((v) => !v);
+                  }}
+                  className="px-2.5 py-1 rounded-md bg-[#1a2b20] hover:bg-[#243c2c] border border-[#334f3c] text-[11px] text-[#ded5c0] flex items-center gap-1 cursor-pointer"
+                >
+                  <Settings2 className="w-3 h-3 text-[#eccb76]" />
+                  <span>Nguồn Facebook</span>
+                </button>
+              </div>
+            </div>
+
+            {fbSyncNotice && (
+              <div
+                className={`mt-2.5 px-3 py-2 rounded-lg flex items-center justify-between gap-2 text-[11px] ${
+                  fbSyncNotice.type === 'error'
+                    ? 'bg-rose-950/60 border border-rose-500/40 text-rose-200'
+                    : fbSyncNotice.type === 'success'
+                    ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-200'
+                    : 'bg-[#18291e] border border-[#34543e] text-[#ded5c0]'
+                }`}
+              >
+                <span>{fbSyncNotice.text}</span>
+                {onDismissFbNotice && (
+                  <button
+                    type="button"
+                    onClick={onDismissFbNotice}
+                    className="text-current opacity-75 hover:opacity-100 cursor-pointer"
+                    aria-label="Đóng thông báo"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {showFbSettings && (
+              <div className="mt-3 pt-3 border-t border-[#24392b] flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <input
+                  type="url"
+                  value={fbPageInput}
+                  onChange={(e) => setFbPageInput(e.target.value)}
+                  placeholder="https://www.facebook.com/chuyensonlaofficial"
+                  className="flex-1 bg-[#0d1610] border border-[#334e3a] rounded-lg px-3 py-1.5 text-xs text-[#f6eedc] focus:outline-hidden focus:border-[#e4c77d]"
+                />
+                {onUpdateFbPageUrl && (
+                  <button
+                    type="button"
+                    disabled={isFbSyncing}
+                    onClick={() => onUpdateFbPageUrl(fbPageInput)}
+                    className="px-3 py-1.5 rounded-lg bg-[#e4c77d] hover:bg-[#ebd79b] text-[#1a160f] font-bold text-xs cursor-pointer"
+                  >
+                    Lưu &amp; Đồng bộ
+                  </button>
+                )}
+                {onSyncFacebook && (
+                  <button
+                    type="button"
+                    disabled={isFbSyncing}
+                    onClick={() => onSyncFacebook({ includeDismissed: true, forceRefresh: true })}
+                    className="px-3 py-1.5 rounded-lg bg-[#1d3225] hover:bg-[#274432] border border-[#3a5c44] text-[#cfc5aa] text-xs flex items-center justify-center gap-1 cursor-pointer"
+                    title="Khôi phục lại các bài Facebook đã xóa nếu có"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Đồng bộ lại tất cả</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Interactive Filter Tabs */}
         <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-8 text-xs font-medium no-scrollbar">
           <button
@@ -240,6 +409,17 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
             }`}
           >
             Tất Cả Kỷ Niệm ({memories.length})
+          </button>
+          <button
+            onClick={() => setFilter('facebook')}
+            className={`px-4 py-2 rounded-lg transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+              filter === 'facebook'
+                ? 'bg-[#8ec5ff] text-[#0f1d2e] font-bold shadow-md'
+                : 'bg-[#182a3b] text-[#b8dbff] hover:bg-[#1f374d] border border-[#2b4d6d]'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Từ Facebook Trường ({fbMemoriesCount})</span>
           </button>
           <button
             onClick={() => setFilter('classroom')}
@@ -315,6 +495,12 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
                     onClick={() => onSelectMemory(mem)}
                     className="relative aspect-4/3 bg-[#1e2c22] rounded-xs overflow-hidden cursor-pointer group-hover:opacity-95 transition-opacity"
                   >
+                    {(mem.source === 'facebook' || mem.id.startsWith('fb-')) && (
+                      <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded bg-[#1877F2]/90 backdrop-blur-xs text-white text-[10px] font-bold shadow-md flex items-center gap-1 pointer-events-none">
+                        <Globe className="w-2.5 h-2.5" />
+                        <span>Facebook Trường</span>
+                      </div>
+                    )}
                     <SyncedImage
                       src={mem.imageSrc}
                       fallbackSrc={DEFAULT_MEMORY_PHOTO}
@@ -322,14 +508,14 @@ export const MemoryScrapbook: React.FC<MemoryScrapbookProps> = ({
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       loading="lazy"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3 pointer-events-none">
                       <span className="text-[11px] text-[#f7e6a1] font-semibold flex items-center gap-1.5">
                         <ImageIcon className="w-3.5 h-3.5" />
                         Xem trọn vẹn
                       </span>
                       <button
                         onClick={(e) => handleOpenEdit(mem, e)}
-                        className="px-2 py-1 rounded bg-[#eccb76] text-[#1a160f] text-[10px] font-bold shadow hover:bg-white transition-colors cursor-pointer flex items-center gap-1"
+                        className="pointer-events-auto px-2 py-1 rounded bg-[#eccb76] text-[#1a160f] text-[10px] font-bold shadow hover:bg-white transition-colors cursor-pointer flex items-center gap-1"
                       >
                         <Camera className="w-3 h-3" />
                         <span>Đổi ảnh</span>

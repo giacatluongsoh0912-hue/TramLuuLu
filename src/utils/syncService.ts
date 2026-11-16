@@ -22,7 +22,12 @@ import {
   INITIAL_TRIBUTES,
 } from '../data/memoriesData';
 import { TributeMessage, PadletNote } from './tributeRules';
-import { idbGet, idbSet } from './imageStorage';
+import { compressDataUrl, idbGet, idbSet } from './imageStorage';
+import {
+  DEFAULT_SCHOOL_FACEBOOK_URL,
+  type ParsedFacebookPost,
+  selectNewFacebookPostsToSync,
+} from './facebookFeedParser';
 import {
   buildOrderMap,
   sortMemoriesDeterministically,
@@ -1131,5 +1136,237 @@ export async function syncSaveFilmFrame(frame: FilmFrame): Promise<void> {
     handleFirestoreError(err, OperationType.WRITE, `film_frames/${frame.id}`);
     throw err;
   }
+}
+
+// ============================================================================
+// 11. SCHOOL FACEBOOK FANPAGE AUTO-SYNC TO "LẬT GIỞ KÝ ỨC"
+// ============================================================================
+
+export interface FacebookSyncState {
+  id: string;
+  pageUrl: string;
+  pageName: string;
+  followerCount: string;
+  autoSyncEnabled: boolean;
+  lastSyncAt: number;
+  syncedCount: number;
+  dismissedIds: string[];
+}
+
+export const DEFAULT_FACEBOOK_SYNC_STATE: FacebookSyncState = {
+  id: 'school_fanpage',
+  pageUrl: DEFAULT_SCHOOL_FACEBOOK_URL,
+  pageName: 'Trường THPT Chuyên Sơn La',
+  followerCount: '',
+  autoSyncEnabled: true,
+  lastSyncAt: 0,
+  syncedCount: 0,
+  dismissedIds: [],
+};
+
+export function subscribeFacebookSyncState(callback: (state: FacebookSyncState) => void) {
+  const docRef = doc(db, 'facebook_sync', 'school_fanpage');
+  return onSnapshot(
+    docRef,
+    async (snapshot) => {
+      if (!snapshot.exists()) {
+        try {
+          await setDoc(docRef, DEFAULT_FACEBOOK_SYNC_STATE);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, 'facebook_sync/school_fanpage');
+        }
+        callback(DEFAULT_FACEBOOK_SYNC_STATE);
+        idbSet('csl_facebook_sync', DEFAULT_FACEBOOK_SYNC_STATE);
+        return;
+      }
+      const data = {
+        ...DEFAULT_FACEBOOK_SYNC_STATE,
+        ...(snapshot.data() as FacebookSyncState),
+      };
+      callback(data);
+      idbSet('csl_facebook_sync', data);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.GET, 'facebook_sync/school_fanpage');
+    }
+  );
+}
+
+export async function syncSaveFacebookSyncState(
+  patch: Partial<FacebookSyncState>
+): Promise<FacebookSyncState> {
+  const docRef = doc(db, 'facebook_sync', 'school_fanpage');
+  try {
+    let finalState: FacebookSyncState = { ...DEFAULT_FACEBOOK_SYNC_STATE, ...patch, id: 'school_fanpage' };
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      const current = snap.exists()
+        ? { ...DEFAULT_FACEBOOK_SYNC_STATE, ...(snap.data() as FacebookSyncState) }
+        : { ...DEFAULT_FACEBOOK_SYNC_STATE };
+      finalState = {
+        ...current,
+        ...patch,
+        id: 'school_fanpage',
+        dismissedIds: (patch.dismissedIds ?? current.dismissedIds ?? []).slice(-200),
+      };
+      tx.set(docRef, finalState, { merge: true });
+    });
+    idbSet('csl_facebook_sync', finalState);
+    return finalState;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'facebook_sync/school_fanpage');
+    throw err;
+  }
+}
+
+export async function syncRecordDismissedFacebookId(memoryId: string): Promise<void> {
+  if (!memoryId.startsWith('fb-')) return;
+  const docRef = doc(db, 'facebook_sync', 'school_fanpage');
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      const current = snap.exists()
+        ? { ...DEFAULT_FACEBOOK_SYNC_STATE, ...(snap.data() as FacebookSyncState) }
+        : { ...DEFAULT_FACEBOOK_SYNC_STATE };
+      const existing = Array.isArray(current.dismissedIds) ? current.dismissedIds : [];
+      if (existing.includes(memoryId)) return;
+      const next = [...existing, memoryId].slice(-200);
+      tx.set(docRef, { ...current, dismissedIds: next }, { merge: true });
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'facebook_sync/school_fanpage');
+  }
+}
+
+let activeFacebookSyncPromise: Promise<FacebookSyncResult> | null = null;
+
+export interface FacebookSyncResult {
+  addedCount: number;
+  totalFetched: number;
+  pageName: string;
+  followerCount: string;
+  pageUrl: string;
+  syncedAt: number;
+  addedMemories: MemoryPhoto[];
+}
+
+async function persistFacebookImageToCloud(imageUrl: string): Promise<string> {
+  try {
+    const res = await fetch(
+      `/api/facebook/image?format=dataurl&url=${encodeURIComponent(imageUrl)}`
+    );
+    if (!res.ok) return imageUrl;
+    const json = (await res.json()) as { ok?: boolean; dataUrl?: string };
+    if (!json.ok || !json.dataUrl || !json.dataUrl.startsWith('data:image/')) {
+      return imageUrl;
+    }
+    const compressed = await compressDataUrl(json.dataUrl, 1400, 1400, 0.85);
+    return await uploadMediaAsset(compressed);
+  } catch {
+    return imageUrl;
+  }
+}
+
+export async function syncFacebookPostsToCloud(params: {
+  pageUrl?: string;
+  existingMemories: ReadonlyArray<MemoryPhoto>;
+  dismissedIds: ReadonlyArray<string>;
+  includeDismissed?: boolean;
+  forceRefresh?: boolean;
+}): Promise<FacebookSyncResult> {
+  if (activeFacebookSyncPromise) {
+    return activeFacebookSyncPromise;
+  }
+
+  activeFacebookSyncPromise = (async () => {
+    const targetUrl = params.pageUrl || DEFAULT_SCHOOL_FACEBOOK_URL;
+    const apiUrl = new URL('/api/facebook/posts', window.location.origin);
+    apiUrl.searchParams.set('pageUrl', targetUrl);
+    if (params.forceRefresh) {
+      apiUrl.searchParams.set('force', '1');
+    }
+
+    const res = await fetch(apiUrl.toString());
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(
+        (errBody as { error?: string }).error || `Lỗi máy chủ (${res.status}) khi đọc Facebook.`
+      );
+    }
+
+    const data = (await res.json()) as {
+      ok?: boolean;
+      pageName?: string;
+      followerCount?: string;
+      pageUrl?: string;
+      posts?: ParsedFacebookPost[];
+      error?: string;
+    };
+
+    if (!data.ok || !Array.isArray(data.posts)) {
+      throw new Error(data.error || 'Không lấy được danh sách bài viết từ Facebook.');
+    }
+
+    const candidates = selectNewFacebookPostsToSync(
+      data.posts,
+      params.existingMemories,
+      params.dismissedIds,
+      { includeDismissed: params.includeDismissed, maxItems: 6 }
+    );
+
+    const addedMemories: MemoryPhoto[] = [];
+    for (const post of candidates) {
+      const storedImageSrc = await persistFacebookImageToCloud(post.imageUrl);
+      const mem: MemoryPhoto = {
+        id: post.id,
+        externalId: post.externalId,
+        title: post.title,
+        year: post.year,
+        category: post.category,
+        caption: post.caption,
+        author: post.author,
+        imageSrc: storedImageSrc,
+        tags: post.tags,
+        likes: post.likes,
+        source: 'facebook',
+        sourceUrl: post.sourceUrl,
+        createdAt: post.createdAt,
+      };
+      await syncSaveMemory(mem);
+      addedMemories.push(mem);
+    }
+
+    const syncedAt = Date.now();
+    const resolvedPageUrl = data.pageUrl || targetUrl;
+    const resolvedPageName = data.pageName || 'Trường THPT Chuyên Sơn La';
+    const resolvedFollowers = data.followerCount || '';
+
+    const nextDismissed = params.includeDismissed
+      ? params.dismissedIds.filter((id) => !addedMemories.some((m) => m.id === id))
+      : params.dismissedIds;
+
+    await syncSaveFacebookSyncState({
+      pageUrl: resolvedPageUrl,
+      pageName: resolvedPageName,
+      followerCount: resolvedFollowers,
+      lastSyncAt: syncedAt,
+      syncedCount: addedMemories.length,
+      dismissedIds: [...nextDismissed],
+    });
+
+    return {
+      addedCount: addedMemories.length,
+      totalFetched: data.posts.length,
+      pageName: resolvedPageName,
+      followerCount: resolvedFollowers,
+      pageUrl: resolvedPageUrl,
+      syncedAt,
+      addedMemories,
+    };
+  })().finally(() => {
+    activeFacebookSyncPromise = null;
+  });
+
+  return activeFacebookSyncPromise;
 }
 

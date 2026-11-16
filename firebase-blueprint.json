@@ -14,6 +14,9 @@
         "imageSrc": { "type": "string", "maxLength": 500000 },
         "tags": { "type": "array" },
         "likes": { "type": "number" },
+        "source": { "type": "string", "enum": ["manual", "facebook"] },
+        "sourceUrl": { "type": "string", "maxLength": 500 },
+        "externalId": { "type": "string", "maxLength": 128 },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" }
       },
@@ -177,6 +180,22 @@
         "updatedAt": { "type": "number" }
       },
       "required": ["id", "label", "imageSrc", "order"]
+    },
+    "FacebookSyncState": {
+      "title": "FacebookSyncState",
+      "description": "Configuration and deduplication state for syncing school Facebook Fanpage posts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "pageUrl": { "type": "string", "maxLength": 500 },
+        "pageName": { "type": "string", "maxLength": 200 },
+        "followerCount": { "type": "string", "maxLength": 50 },
+        "autoSyncEnabled": { "type": "boolean" },
+        "lastSyncAt": { "type": "number" },
+        "syncedCount": { "type": "number" },
+        "dismissedIds": { "type": "array" }
+      },
+      "required": ["id", "pageUrl", "autoSyncEnabled"]
     }
   },
   "firestore": {
@@ -223,6 +242,10 @@
     "/film_frames/{frameId}": {
       "schema": "FilmFrame",
       "description": "Editable 4-frame showcase inside the cinematic film reel strip"
+    },
+    "/facebook_sync/{syncId}": {
+      "schema": "FacebookSyncState",
+      "description": "State and dismissed post tracking for automatic Facebook Fanpage memory sync"
     }
   }
 }
