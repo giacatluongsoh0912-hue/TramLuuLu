@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Flame, Send, Sparkles, Award, Edit2, X, Check } from 'lucide-react';
+import { Heart, Send, Sparkles, Award, Edit2, X, Check } from 'lucide-react';
 import { DepartmentFaculty } from '../data/memoriesData';
 
 interface TeacherTributesProps {
@@ -86,20 +86,20 @@ export const TeacherTributes: React.FC<TeacherTributesProps> = ({
             Người Dẫn Lối Thầm Lặng
           </h2>
           <p className="font-body text-sm sm:text-base text-[#b6ab93] mt-3 leading-relaxed">
-            Mỗi bài giảng là một chuyến đò, mỗi lời khuyên là một ngọn hải đăng soi sáng con đường tuổi trẻ. Hãy cùng thắp sáng những ngọn nến tri ân gửi đến từng tổ chuyên môn kính mến.
+            Mỗi bài giảng là một chuyến đò, mỗi lời khuyên là một ngọn hải đăng soi sáng con đường tuổi trẻ. Hãy cùng gửi những lời tri ân ấm áp nhất đến từng tổ chuyên môn kính mến.
           </p>
 
           {/* Aggregate Stat Banner */}
           <div className="mt-6 inline-flex items-center gap-3 bg-[#1e3325] border border-[#34533d] px-5 py-2.5 rounded-full shadow-inner">
-            <Flame className="w-5 h-5 text-[#f59e0b] fill-[#f59e0b] animate-bounce" />
+            <Heart className="w-5 h-5 text-rose-400 fill-rose-400 animate-bounce" />
             <span className="text-xs sm:text-sm font-medium text-[#f5ecd5]">
-              Đã có <span className="font-bold text-[#eccb76] font-mono">{totalCandles.toLocaleString()}</span> ngọn nến tri ân được thắp sáng
+              Đã có <span className="font-bold text-[#eccb76] font-mono">{totalCandles.toLocaleString()}</span> lượt gửi lời tri ân thầy cô
             </span>
           </div>
 
           {recentlyLit && (
             <div className="mt-3 text-xs font-semibold text-[#86efac] animate-fade-in">
-              ✨ Cảm ơn bạn! Ngọn nến tri ân đã được thắp sáng gửi tới {recentlyLit}.
+              ✨ Cảm ơn bạn! Lời tri ân yêu thương đã được gửi tới {recentlyLit}.
             </div>
           )}
         </div>
@@ -157,15 +157,15 @@ export const TeacherTributes: React.FC<TeacherTributesProps> = ({
                   </div>
                 </div>
 
-                {/* Card Actions: Light Candle & Send Letter */}
+                {/* Card Actions: Send Quick Tribute & Send Letter */}
                 <div className="mt-5 pt-3 border-t border-[#243a2b] flex items-center justify-between gap-2">
                   <button
                     onClick={() => handleLightCandle(dept.id, dept.name, dept.candleCount)}
                     className="flex-1 py-2 px-3 rounded-lg bg-[#22392b] hover:bg-[#2c4a37] text-xs font-semibold text-[#f8edd2] transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-[#3b5e47] active:scale-95"
-                    title="Thắp sáng một ngọn nến tri ân"
+                    title="Gửi lời tri ân tới tổ chuyên môn"
                   >
-                    <Flame className="w-3.5 h-3.5 text-[#f59e0b] fill-[#f59e0b]" />
-                    <span>Thắp nến</span>
+                    <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-400" />
+                    <span>Gửi lời tri ân</span>
                     <span className="font-mono text-[11px] text-[#eccb76] ml-1">
                       ({candleCount})
                     </span>

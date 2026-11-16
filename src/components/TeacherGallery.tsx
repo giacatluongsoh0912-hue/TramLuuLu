@@ -10,7 +10,7 @@ import {
   Award,
   BookOpen,
   X,
-  Flame,
+  Heart,
   Clock,
   Trash2,
   Edit2,
@@ -720,9 +720,9 @@ export const TeacherGallery: React.FC<TeacherGalleryProps> = ({
                     <button
                       onClick={() => handleToggleLike(tch.id, tch.likes)}
                       className="py-2 px-3 rounded-lg bg-[#1c3022] hover:bg-[#253e2d] text-xs font-semibold text-[#f87171] border border-[#2e4c36] transition-colors flex items-center gap-1.5 cursor-pointer"
-                      title="Thắp nến & Thả tim tri ân"
+                      title="Thả tim & Gửi lời tri ân"
                     >
-                      <Flame className="w-3.5 h-3.5 text-[#f59e0b] fill-[#f59e0b]" />
+                      <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-400" />
                       <span className="font-mono text-[#f6eedc] text-xs">{likes}</span>
                     </button>
                   </div>

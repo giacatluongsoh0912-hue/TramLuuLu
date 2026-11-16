@@ -640,7 +640,7 @@ export const CinematicLetterDesk: React.FC<CinematicLetterDeskProps> = ({
                           : 'border-[#2c4735] bg-[#0c140e] text-[#cfc5aa]'
                       }`}
                     >
-                      🔴 Dấu son đỏ + Ngọn nến ấm
+                      🔴 Dấu son đỏ + Ngôi sao tri ân
                     </button>
                     <button
                       type="button"

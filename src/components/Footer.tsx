@@ -89,7 +89,7 @@ export const Footer: React.FC = () => {
               </li>
               <li>
                 <a href="#teachers" className="hover:text-white transition-colors">
-                  Người dẫn lối & Thắp nến tri ân
+                  Người dẫn lối & Gửi lời tri ân
                 </a>
               </li>
               <li>

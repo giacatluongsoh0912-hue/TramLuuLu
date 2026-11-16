@@ -199,7 +199,7 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
       case 'chalk':
         return <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4a6350]">✏️ Viên phấn trắng thân thương</span>;
       case 'candle':
-        return <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#99551c]">🕯️ Ngọn nến tri ân</span>;
+        return <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#99551c]">🌟 Ngôi sao tri ân</span>;
       default:
         return null;
     }
@@ -619,7 +619,7 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
                           : 'border-[#334e3a] bg-[#142017] text-[#cfc5aa]'
                       }`}
                     >
-                      🕯️ Ngọn nến
+                      🌟 Ngôi sao tri ân
                     </button>
                   </div>
                 </div>
@@ -870,7 +870,7 @@ export const GuestbookSection: React.FC<GuestbookSectionProps> = ({
                           : 'border-[#2c4735] bg-[#101b13] text-[#cfc5aa]'
                       }`}
                     >
-                      🕯️ Ngọn nến ấm
+                      🌟 Ngôi sao tri ân
                     </button>
                   </div>
                 </div>
